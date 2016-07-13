@@ -1,0 +1,193 @@
+'use strict';
+
+const RegExpX = require('../');
+
+
+describe('"RegExpX" should', function() {
+
+	it('remove comments', () => {
+		RegExpX`#`.should.deep.equal(new RegExp(''));
+		RegExpX`a#b`.should.deep.equal((/a/));
+		RegExpX`[a#b]{10}`.should.deep.equal((/[a#b]{10}/));
+		(() => RegExpX`(a#b){10}`).should.throw(SyntaxError);
+	});
+
+	it('keep escaped comments', () => {
+		RegExpX`\#`.should.deep.equal((/#/));
+		RegExpX`a\#b`.should.deep.equal((/a#b/));
+		RegExpX`[a\#b]{10}`.should.deep.equal((/[a\#b]{10}/));
+		RegExpX`(a\#b){10}`.should.deep.equal((/(a#b){10}/));
+	});
+
+	it('remove comments after escaped comments', () => {
+		RegExpX`\##`.should.deep.equal((/#/));
+		RegExpX`\#a#b`.should.deep.equal((/#a/));
+		RegExpX`\\\#a\\#b`.should.deep.equal((/\\#a\\/));
+		RegExpX`\\\#a\\\\#b`.should.deep.equal((/\\#a\\\\/));
+		RegExpX`\\\\\\\#a\\\\#b`.should.deep.equal((/\\\\\\#a\\\\/));
+		RegExpX`\#[a#b]{10}`.should.deep.equal((/#[a#b]{10}/));
+		(() => RegExpX`\#(a#b){10}`).should.throw(SyntaxError);
+		(() => RegExpX`\#(a\\\\#b){10}`).should.throw(SyntaxError);
+	});
+
+	it('strip whitespaces', () => {
+		RegExpX` `.should.deep.equal(new RegExp(''));
+		RegExpX`
+		`.should.deep.equal(new RegExp(''));
+		RegExpX`a bc\\	d`.should.deep.equal((/abc\\d/));
+		RegExpX`a
+		`.should.deep.equal((/a/));
+	});
+
+	it('keep escaped whitespaces', () => {
+		RegExpX`\ `.should.deep.equal((/ /));
+		RegExpX`\
+`.should.deep.equal(new RegExp(String.raw`
+`));
+		RegExpX`\\\\\ `.should.deep.equal((/\\\\ /));
+		RegExpX`\\\\\ \\	`.should.deep.equal((/\\\\ \\/));
+		RegExpX`a\ b`.should.deep.equal((/a b/));
+		RegExpX`[a b]{10}`.should.deep.equal((/[a b]{10}/));
+		RegExpX`[a\ b]{10}`.should.deep.equal((/[a\ b]{10}/));
+	});
+
+	it('handle character lists correctly', () => {
+		RegExpX`\[a[b\]c]d\[]`.should.deep.equal((/\[a[b\]c]d\[]/));
+		RegExpX`\[a\ [b\]\ /c]\ d\[\ ]`.should.deep.equal((/\[a [b\]\ \/c] d\[ ]/));
+	});
+
+	it('find flags', () => {
+		RegExpX`a/i`.should.deep.equal((/a/i));
+		RegExpX`/i`.should.deep.equal((/(?:)/i));
+		RegExpX`/`.should.deep.equal((/(?:)/));
+		RegExpX`a\/b/i`.should.deep.equal((/a\/b/i));
+		RegExpX`a\/b\\\\/i`.should.deep.equal((/a\/b\\\\/i));
+		RegExpX`a\/b # comment
+		/igm # flags`.should.deep.equal((/a\/b/igm));
+	});
+
+	it(`paste a regExp's .souce`, () => {
+		const newLine = /(?:\r\n?|\n)/;
+		const sentence = /([\w\.\ 0-9]*)/gim;
+		RegExpX`(${ sentence } (<br><\/br>)+ ${ newLine })+`.should.deep.equal((/(([\w\.\ 0-9]*)(<br><\/br>)+(?:\r\n?|\n))+/));
+	});
+
+	it(`escape string substitutions`, () => {
+		const question = '?';
+		RegExpX`${ 'Name' } ${ question }`.should.deep.equal((/Name\?/));
+	});
+
+	it(`substitute arrays as a list of alternatives`, () => {
+		const punctuation = [ '?', '!', '.', ',', ';', ];
+		RegExpX`${ 'Name' } ${ punctuation }`.should.deep.equal((/Name(?:\?|!|\.|\,|;)/));
+	});
+
+	it(`substitute object as a list of capturing alternatives`, () => {
+		const punctuation = { question: '?', exclamation: '!', sentence: '.', };
+		RegExpX`${ 'Name' } ${ punctuation }`.should.deep.equal((/Name(?:(\?)|(!)|(\.))/));
+	});
+
+	it(`assign groups from substituted object to properties of the match array`, () => {
+		const punctuation = { question: '?', exclamation: '!', sentence: '.', };
+		const exp1 = RegExpX`${ punctuation }`;
+		'?'.match(exp1).should.have.a.property('question', '?');
+
+		const exp2 = RegExpX`${ punctuation }${ punctuation }${ punctuation }`;
+		'?!.'.match(exp2).should.contain.all.keys({ question: '?', exclamation: '!', sentence: '.', });
+		console.log('exp2', exp2);
+
+		const exp3 = RegExpX`(\+|-)${{ word: /[A-z]+/, number: /\d+/, }} ( ${{ punctuation: /[?!.]/, }} )?`;
+		'+20'.match(exp3).should.have.a.property('number', '20');
+		'-hello'.match(exp3).should.have.a.property('word', 'hello');
+		exp3.exec('+NO!').should.contain.all.keys({ word: 'NO', punctuation: '!', });
+	});
+
+	it(`accept the 's' (single) flag`, () => {
+		RegExpX`.`.should.deep.equal((/./));
+		RegExpX({ single: true, })`.`.should.deep.equal((/[^]/));
+		RegExpX('s')`.`.should.deep.equal((/[^]/));
+		RegExpX('s')`\.`.should.deep.equal((/\./));
+		RegExpX('s')`.[.]`.should.deep.equal((/[^][.]/));
+		const dot = /./;
+		RegExpX('s')`${ dot }[${ dot }]`.should.deep.equal((/[^][.]/));
+		RegExpX('s')`${ '.' }[${ dot }]`.should.deep.equal((/\.[.]/));
+	});
+
+	it(`accept the 'U' (ungreedy) flag`, () => {
+		RegExpX`.*`.should.deep.equal((/.*/));
+		RegExpX({ ungreedy: true, })`.*`.should.deep.equal((/.*?/));
+		RegExpX('U')`.*`.should.deep.equal((/.*?/));
+		RegExpX('U')`.*?`.should.deep.equal((/.*/));
+		RegExpX('U')`.+`.should.deep.equal((/.+?/));
+		RegExpX('U')`.+?`.should.deep.equal((/.+/));
+		RegExpX('U')`.{10}`.should.deep.equal((/.{10}?/));
+		RegExpX('U')`.{10}?`.should.deep.equal((/.{10}/));
+		RegExpX('U')`.{10,}`.should.deep.equal((/.{10,}?/));
+		RegExpX('U')`.{10,}?`.should.deep.equal((/.{10,}/));
+		RegExpX('U')`.{10,20}`.should.deep.equal((/.{10,20}?/));
+		RegExpX('U')`.{10,20}?`.should.deep.equal((/.{10,20}/));
+		RegExpX('U')`[a.{10,20}b]`.should.deep.equal((/[a.{10,20}b]/));
+		const more = /.*/;
+		RegExpX('U')`${ more }[${ more }]`.should.deep.equal((/.*?[.*]/));
+		RegExpX('U')`${ '.*' }[${ more }]`.should.deep.equal((/\.\*[.*]/));
+	});
+
+	it(`accept the 'n' (nocapture) flag`, () => {
+		RegExpX`(.)`.should.deep.equal((/(.)/));
+		RegExpX({ nocapture: true, })`(.)`.should.deep.equal((/(?:.)/));
+		RegExpX('n')`(.)`.should.deep.equal((/(?:.)/));
+		RegExpX('n')`(?:.)`.should.deep.equal((/(?:.)/));
+		RegExpX('n')`(?!.)`.should.deep.equal((/(?!.)/));
+		RegExpX('n')`[(.)]`.should.deep.equal((/[(.)]/));
+		RegExpX('n')`(.)-${{ char: /\w/, }}`.should.deep.equal((/(?:.)-(?:(\w))/));
+		RegExpX('n')`(.)-${{ char: /\w/, }}`.exec('a-b').should.have.a.property('char', 'b');
+	});
+
+	it(`translate references to captured groups`, () => {
+		RegExpX`(.)$1`.should.deep.equal((/(.)\1/));
+		RegExpX`(.)$<1>`.should.deep.equal((/(.)\1/));
+		const double = RegExpX`${{ char: /\w/, }}$<char>`;
+		double.test('aa').should.be.true;
+		double.test('ab').should.be.false;
+		double.should.deep.equal((/(?:(\w))\1/));
+		RegExpX`(?<char>\w)$<char>`.should.deep.equal((/(\w)\1/));
+		RegExpX`(.)[$1]`.should.deep.equal((/(.)[$1]/));
+		(() => RegExpX`$0`).should.throw(SyntaxError);
+		(() => RegExpX`$1`).should.throw(SyntaxError);
+		(() => RegExpX`(?<ch ar>\w)$<char>`).should.throw(SyntaxError);
+		(() => RegExpX`(?<char>\w)$<ch ar>`).should.throw(SyntaxError);
+		(() => RegExpX`${{ $: /\w/, }}`).should.throw(SyntaxError);
+	});
+
+	it('work', () => {
+		RegExpX`
+			[\n\ ] # newline or space
+			\/ # an escaped slash
+			\# # '#'-char
+			\# not a comment # but this is
+			/g # flags
+		`.should.deep.equal((/[\n\ ]\/##notacomment/g));
+
+		RegExpX`^(
+			 \d\d\d\d (- W[0-5]?\d)?                          # years + optional weeks
+			|\d\d\d\d  - [0-1]?\d (- [0-3]?\d)?               # years + months + optional days
+			|            [0-1]?\d  - [0-3]?\d                 # months + days
+			|\d\d\d\d  - [0-1]?\d  - [0-3]?\d [T ] [0-2]?\d : [0-6]\d (: [0-6]\d (\. \d\d?\d?)?)? ([Z] | [+-] [0-2]?\d : [0-6]\d)? # TODO timezone other then 'Z'
+			    # years + months + days + hours + minutes + optional seconds and milliseconds + optional time zone
+			|[0-2]?\d : [0-6]\d ( [+-] [0-2]?\d : [0-6]\d)?   # hours + minutes + optional time zone (hh:mm)
+			|P \d+ D                                          # duration in days
+			|PT \d+ H (\d+ M (\d+ S)?)?                       # duration in hours + minutes + seconds
+			# TODO: check duration
+		)$`.should.deep.equal((/^(\d\d\d\d(-W[0-5]?\d)?|\d\d\d\d-[0-1]?\d(-[0-3]?\d)?|[0-1]?\d-[0-3]?\d|\d\d\d\d-[0-1]?\d-[0-3]?\d[T ][0-2]?\d:[0-6]\d(:[0-6]\d(\.\d\d?\d?)?)?([Z]|[+-][0-2]?\d:[0-6]\d)?|[0-2]?\d:[0-6]\d([+-][0-2]?\d:[0-6]\d)?|P\d+D|PT\d+H(\d+M(\d+S)?)?)$/));
+
+		RegExpX`^(
+			((http s? | mailto) \:\/\/)? (?:
+				  [\#\@\&\=\+\$\,\/\?]   # reserved    # not used:  \! \* \' \( \) \; \: \[ \]
+				| [\-\_\.\~\w]           # unreserved
+				| \%
+			)*
+		)$`.should.deep.equal((/^(((https?|mailto)\:\/\/)?(?:[\#\@\&\=\+\$\,\/\?]|[\-\_\.\~\w]|\%)*)$/));
+	});
+
+});
+
