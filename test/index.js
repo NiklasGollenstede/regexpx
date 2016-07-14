@@ -37,6 +37,7 @@ describe('"RegExpX" should', function() {
 		RegExpX`a bc\\	d`.should.deep.equal((/abc\\d/));
 		RegExpX`a
 		`.should.deep.equal((/a/));
+		RegExpX`a {1,3}`.should.deep.equal((/a{1,3}/));
 	});
 
 	it('keep escaped whitespaces', () => {
@@ -49,6 +50,15 @@ describe('"RegExpX" should', function() {
 		RegExpX`a\ b`.should.deep.equal((/a b/));
 		RegExpX`[a b]{10}`.should.deep.equal((/[a b]{10}/));
 		RegExpX`[a\ b]{10}`.should.deep.equal((/[a\ b]{10}/));
+	});
+
+	it('not just remove spaces within escape sequences', () => {
+		(() => RegExpX`${ /(.) \1 23/ }`).should.throw(SyntaxError);
+		const exp2 = RegExpX`a{ 1,3}`;
+		exp2.test('a{1,3}').should.be.true; // /a{(?:)1,3}/
+		exp2.test('aa').should.be.false; // /a{1,3}/
+
+		// TODO: more tests
 	});
 
 	it('handle character lists correctly', () => {
@@ -64,6 +74,36 @@ describe('"RegExpX" should', function() {
 		RegExpX`a\/b\\\\/i`.should.deep.equal((/a\/b\\\\/i));
 		RegExpX`a\/b # comment
 		/igm # flags`.should.deep.equal((/a\/b/igm));
+	});
+
+	it('disallow octal escapes (\\123)', () => {
+		RegExpX`\0`.should.deep.equal((/\0/));
+		RegExpX`\0 1`.should.deep.equal((/\0(?:)1/));
+		RegExpX`\0
+		9`.should.deep.equal((/\0(?:)9/));
+		(() => RegExpX`${ /\1/ }`).should.throw(SyntaxError);
+		(() => RegExpX`${ /\01/ }`).should.throw(SyntaxError);
+		(() => RegExpX`${ /\001/ }`).should.throw(SyntaxError);
+		(() => RegExpX`${ /\901/ }`).should.throw(SyntaxError);
+	});
+
+	it('disallow unnecessary escapes', () => {
+		RegExpX`\d\D\w\W\s\S\t\r\n\v\f`.should.deep.equal((/\d\D\w\W\s\S\t\r\n\v\f/));
+		RegExpX`\cM`.should.deep.equal((/\cM/));
+		RegExpX`\x0F`.should.deep.equal((/\x0F/));
+		RegExpX`\u12Af`.should.deep.equal((/\u12Af/));
+		RegExpX`\u{12Af}/u`.should.deep.equal((/\u{12Af}/u));
+		RegExpX`\u{12Af7}/u`.should.deep.equal((/\u{12Af7}/u));
+		RegExpX`\ u{12345}/u`.should.deep.equal((/ u{12345}/u));
+		(() => RegExpX`\a`).should.throw(SyntaxError);
+		(() => RegExpX`${ /\x1/ }`).should.throw(SyntaxError);
+		(() => RegExpX`${ /\x1G/ }`).should.throw(SyntaxError);
+		(() => RegExpX`${ /\x1 F/ }`).should.throw(SyntaxError);
+		(() => RegExpX`${ /\u12/ }`).should.throw(SyntaxError);
+		(() => RegExpX`${ /\u12 Af/ }`).should.throw(SyntaxError);
+		(() => RegExpX`${ /\u{12 Af}/ }/u`).should.throw(SyntaxError);
+		(() => RegExpX`${ /\u {12Af}/ }/u/u`).should.throw(SyntaxError);
+		(() => RegExpX`\c M`).should.throw(SyntaxError);
 	});
 
 	it(`paste a regExp's .souce`, () => {
@@ -94,7 +134,6 @@ describe('"RegExpX" should', function() {
 
 		const exp2 = RegExpX`${ punctuation }${ punctuation }${ punctuation }`;
 		'?!.'.match(exp2).should.contain.all.keys({ question: '?', exclamation: '!', sentence: '.', });
-		console.log('exp2', exp2);
 
 		const exp3 = RegExpX`(\+|-)${{ word: /[A-z]+/, number: /\d+/, }} ( ${{ punctuation: /[?!.]/, }} )?`;
 		'+20'.match(exp3).should.have.a.property('number', '20');
@@ -139,34 +178,49 @@ describe('"RegExpX" should', function() {
 		RegExpX('n')`(?:.)`.should.deep.equal((/(?:.)/));
 		RegExpX('n')`(?!.)`.should.deep.equal((/(?!.)/));
 		RegExpX('n')`[(.)]`.should.deep.equal((/[(.)]/));
-		RegExpX('n')`(.)-${{ char: /\w/, }}`.should.deep.equal((/(?:.)-(?:(\w))/));
-		RegExpX('n')`(.)-${{ char: /\w/, }}`.exec('a-b').should.have.a.property('char', 'b');
+		RegExpX('n')`(.)-${{ char: /\w/ }}`.should.deep.equal((/(?:.)-(?:(\w))/));
+		RegExpX('n')`(.)-${{ char: /\w/ }}`.exec('a-b').should.have.a.property('char', 'b');
 	});
 
 	it(`translate references to captured groups`, () => {
 		RegExpX`(.)$1`.should.deep.equal((/(.)\1/));
 		RegExpX`(.)$<1>`.should.deep.equal((/(.)\1/));
+		RegExpX`(?<char>\w)$1`.should.deep.equal((/(\w)\1/));
 		const double = RegExpX`${{ char: /\w/, }}$<char>`;
 		double.test('aa').should.be.true;
 		double.test('ab').should.be.false;
 		double.should.deep.equal((/(?:(\w))\1/));
 		RegExpX`(?<char>\w)$<char>`.should.deep.equal((/(\w)\1/));
+		RegExpX`(?<char>\w)$ <char>`.should.deep.equal((/(\w)$<char>/));
 		RegExpX`(.)[$1]`.should.deep.equal((/(.)[$1]/));
+		const sandwich = RegExpX`${{ char: /\w/ }}(?<char>\w)$<char>`;
+		sandwich.test('aaa').should.be.true;
+		sandwich.test('aba').should.be.true;
+		sandwich.test('abb').should.be.false;
 		(() => RegExpX`$0`).should.throw(SyntaxError);
 		(() => RegExpX`$1`).should.throw(SyntaxError);
+		(() => RegExpX('n')`(.)$1`).should.throw(SyntaxError);
 		(() => RegExpX`(?<ch ar>\w)$<char>`).should.throw(SyntaxError);
+		(() => RegExpX`(? <char>\w)`).should.throw(SyntaxError);
 		(() => RegExpX`(?<char>\w)$<ch ar>`).should.throw(SyntaxError);
-		(() => RegExpX`${{ $: /\w/, }}`).should.throw(SyntaxError);
+		(() => RegExpX`${{ $: /\w/ }}`).should.throw(SyntaxError);
+		(() => RegExpX`${{ '': /\w/ }}`).should.throw(SyntaxError);
 	});
 
 	it('work', () => {
 		RegExpX`
-			[\n\ ] # newline or space
+			([\n\ ]) # newline or space
 			\/ # an escaped slash
 			\# # '#'-char
 			\# not a comment # but this is
+			${ ',?' } # a string substitution
+			${{ chars: /\w+/ }} # a implicitly named group
+			(?<chars>\w) # explicitly named group withthe same name
+			$<chars> # a reference to that group
+			$1 # a reference to the first line
+			. # match all chars except newline
 			/g # flags
-		`.should.deep.equal((/[\n\ ]\/##notacomment/g));
+		`.should.deep.equal((/([\n\ ])\/##notacomment\,\?(?:(\w+))(\w)\2\1./g));
 
 		RegExpX`^(
 			 \d\d\d\d (- W[0-5]?\d)?                          # years + optional weeks

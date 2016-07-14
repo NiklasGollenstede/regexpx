@@ -44,138 +44,7 @@ function RegExpX(options) {
 	}
 	const input = String.raw.apply(String, arguments); // get the string exactly as typed ==> no further escaping necessary
 
-	function substitute(arg, groups) {
-		if (!arg) { return arg +''; }
-		if (typeof arg === 'string') { return escape(arg); }
-		if (arg.source && arg.toString && arg.toString().startsWith(arg.source, 1)) { return arg.source; }
-		if (Array.isArray(arg)) {
-			return '(?:'+ arg.map(item => substitute(item, groups)).join('|') +')';
-		}
-		if (typeof arg === 'object') {
-			return '(?:'+ Object.keys(arg).map(key => {
-				return '(?<'+ key +'>'+ substitute(arg[key], groups) +')';
-			}).join('|') +')';
-		}
-		return escape(arg +'');
-	}
-
-	function escape(string) {
-		return string.replace(/[\-\[\]\{\}\(\)\*\+\?\.\,\\\/\^\$\|\#\s]/g, '\\$&');
-	}
-
-	function isEscaped(ctx) {
-		return ctx.now.match(/\\*$/)[0].length % 2 === 1;
-	}
-
-	const parser = new Map([
-		[ /^\s$/, function(ctx, wsp) { // remove whitespaces or an escaping slash
-			if (ctx.list) { return true; }
-			if (isEscaped(ctx)) {
-				ctx.now = ctx.now.slice(0, -1) + wsp;
-			}
-		}, ],
-		[ /^\[$/, function(ctx) { // step into character list
-			!ctx.list && !isEscaped(ctx) && (ctx.list = true);
-			return true;
-		}, ],
-		[ /^\]$/, function(ctx) { // step out of character list
-			ctx.list && !isEscaped(ctx) && (ctx.list = false);
-			return true;
-		}, ],
-		[ /^\.$/, function(ctx) { // implement 's' flag
-			ctx.now += !ctx.list && ctx.single && !isEscaped(ctx) ? '[^]' : '.';
-		}, ],
-		[ /^(?:\*|\+|\{\d+(?:\,\d*)?\})$/, function(ctx) { // implement 'U' flag
-			if (!ctx.list && ctx.ungreedy && !isEscaped(ctx)) {
-				ctx.next = ctx.next.replace(/^(\?)?/, (_, is) => is ? '' : '?');
-			}
-			return true;
-		}, ],
-		[ /^(?:\$\d|\$<)$/, function(ctx, group) { // resolve group references
-			if (ctx.list) { return true; }
-			let index, name;
-			if ((/\d$/).test(group)) {
-				const digits = (/^\d*/).exec(ctx.next)[0];
-				ctx.next = ctx.next.slice(digits.length);
-				index = +(group.slice(-1) + digits);
-			} else {
-				const match = (/^(\w+)>/).exec(ctx.next);
-				if (!match) { throw new SyntaxError('Invalid group reference, expected group name after "$<"'); }
-				ctx.next = ctx.next.slice(match[0].length);
-				if (+match[1]) { index = +match[1]; }
-				else { name = match[1]; }
-			}
-			if (index && index < ctx.groups.length) {
-				ctx.now += '\\'+ index;
-			} else if (name && ctx.groups.includes(name)) {
-				ctx.now += '\\'+ ctx.groups.indexOf(name);
-			} else {
-				throw new SyntaxError('Reference to non-existent subpattern "'+ (name || index) +'" in "'+ group +'"');
-			}
-		}, ],
-		[ /^\(\?<$/, function(ctx) { // translate named groups and store references
-			if (ctx.list || isEscaped(ctx)) { return true; }
-			const match = (/^(\w+)>/).exec(ctx.next);
-			if (!match) { throw new SyntaxError('Invalid group structure, expected named group'); }
-			if ((/^\d/).test(match[1])) { throw new SyntaxError('Invalid group structure, group name must not begin with a digit'); }
-			ctx.groups.push(match[1]);
-			ctx.next = ctx.next.slice(match[0].length);
-			ctx.now += '(';
-		}, ],
-		[ /^\($/, function(ctx) { // find unnamed groups and ether write references or translate to non-capturing group ('n' flag)
-			if (ctx.list) { return true; }
-			if ((/^\?/).test(ctx.next)) { return true; }
-			if (ctx.nocapture) {
-				ctx.now += '(?:';
-			} else {
-				ctx.groups.push(null);
-				return true;
-			}
-		}, ],
-		[ /^\#$/, function(ctx) { // strip comments
-			if (ctx.list) { return true; }
-			if (isEscaped(ctx)) {
-				ctx.now = ctx.now.slice(0, -1) +'#';
-			} else {
-				ctx.next = ctx.next.replace(/^.*[^]/, '');
-			}
-		}, ],
-		[ /^\/$/, function(ctx) { // find native flags
-			if (ctx.list) { return true; }
-			if (isEscaped(ctx)) {
-				ctx.now += '/';
-			} else {
-				if (ctx.source) { throw new SyntaxError('Invalid regular expression flags'); }
-				ctx.source = ctx.done + ctx.now;
-				ctx.done = ''; ctx.now = '';
-			}
-		}, ],
-	]);
-	parser.tokens = new RegExp('(.*?)('+ Array.from(parser.keys()).map(_=>_.source.slice(1, -1)).join('|') +')', '');
-	parser.replacers = Array.from(parser.values());
-
-	function parse(parser, ctx, input) {
-		const { tokens, } = parser;
-		ctx.done = ''; ctx.now = ''; ctx.next = input;
-		while (ctx.next) {
-			const match = tokens.exec(ctx.next);
-			if (!match) { ctx.done += ctx.next; break; }
-			ctx.now = match[1];
-			ctx.next = ctx.next.slice(match[0].length);
-			const token = match[2];
-			for (let [ exp, replace, ] of parser) {
-				if (!exp.test(token)) { continue; }
-				if (replace(ctx, token)) {
-					ctx.now += token;
-				}
-				break;
-			}
-			ctx.done += ctx.now;
-		}
-		return ctx;
-	}
-
-	parse(parser, ctx, input);
+	parse(ctx, input);
 	if (ctx.list) { RegExp('['); } // throws
 	if (ctx.source === undefined) {
 		ctx.source = ctx.done;
@@ -183,29 +52,189 @@ function RegExpX(options) {
 		ctx.flags = ctx.done;
 	}
 
-	const regExp = ctx.groups.some(_=>_) ? new RegExpNamed(ctx) : new RegExp(ctx.source, ctx.flags);
+	const regExp = new RegExp(ctx.source, ctx.flags);
 	regExp.originalSource = input;
+	ctx.groups.some(_=>_) && extendExec(regExp, ctx.groups);
 	return regExp;
 }
 
-class RegExpNamed extends RegExp {
-	constructor(ctx) {
-		super(ctx.source, ctx.flags);
-		this.groups = ctx.groups;
+function substitute(arg, groups) {
+	if (!arg) { return arg +''; }
+	if (typeof arg === 'string') { return escape(arg); }
+	if (arg.source && arg.toString && arg.toString().startsWith(arg.source, 1)) { return arg.source; }
+	if (Array.isArray(arg)) {
+		return '(?:'+ arg.map(item => substitute(item, groups)).join('|') +')';
 	}
-	assignNames(match) {
-		match && this.groups.forEach((name, index) => name !== null && match[index] !== undefined && (match[name] = match[index]));
+	if (typeof arg === 'object') {
+		return '(?:'+ Object.keys(arg).map(key => {
+			return '(?<'+ key +'>'+ substitute(arg[key], groups) +')';
+		}).join('|') +')';
+	}
+	return escape(arg +'');
+}
+
+function escape(string) {
+	return string.replace(/[\-\[\]\{\}\(\)\*\+\?\.\,\\\/\^\$\|\#\s]/g, '\\$&');
+}
+
+function isEscaped(ctx) {
+	return ctx.now.match(/\\*$/)[0].length % 2 === 1;
+}
+
+const parser = {
+	[/\s/](ctx, wsp) { // remove whitespaces or an escaping slash
+		if (ctx.list) { return true; }
+		if (isEscaped(ctx)) {
+			ctx.now = ctx.now.slice(0, -1) + wsp;
+		} else {
+			const match = (/(.)([^\(\)\[\]\{\}\$\|\*\+\\\?]*?)$/).exec(ctx.now);
+			if (!match || isEscaped({ now: ctx.now.slice(0, -match[0].length), })) { return; }
+			switch (match[1]) { // insert (?:) if potentially within { }-quantifier or escape sequence
+				case '{': ctx.now += '(?:)'; break;
+			}
+		}
+	},
+	[/\[/](ctx) { // step into character list
+		!ctx.list && !isEscaped(ctx) && (ctx.list = true);
+		return true;
+	},
+	[/\]/](ctx) { // step out of character list
+		ctx.list && !isEscaped(ctx) && (ctx.list = false);
+		return true;
+	},
+	[/\./](ctx) { // implement 's' flag
+		ctx.now += !ctx.list && ctx.single && !isEscaped(ctx) ? '[^]' : '.';
+	},
+	[/(?:\*|\+|\{\d+(?:\,\d*)?\})/](ctx) { // implement 'U' flag
+		if (!ctx.list && ctx.ungreedy && !isEscaped(ctx)) {
+			ctx.next = ctx.next.replace(/^(\?)?/, (_, is) => is ? '' : '?');
+		}
+		return true;
+	},
+	[/(?:\$\d|\$<|\\k<)/](ctx, group) { // resolve group references
+		if (ctx.list) { return true; }
+		let index, name;
+		if ((/\d$/).test(group)) {
+			const digits = (/^\d*/).exec(ctx.next)[0];
+			ctx.next = ctx.next.slice(digits.length);
+			index = +(group.slice(-1) + digits);
+		} else {
+			const match = (/^(\w+)>/).exec(ctx.next);
+			if (!match) { throw new SyntaxError('Invalid group reference, expected group name after "$<"'); }
+			ctx.next = ctx.next.slice(match[0].length);
+			if (+match[1]) { index = +match[1]; }
+			else { name = match[1]; }
+		}
+		if (index && index < ctx.groups.length) {
+			ctx.now += '\\'+ index;
+		} else if (name && ctx.groups.includes(name)) {
+			ctx.now += '\\'+ ctx.groups.indexOf(name);
+		} else {
+			throw new SyntaxError('Reference to non-existent subpattern "'+ (name || index) +'"');
+		}
+	},
+	[/\(\?</](ctx) { // translate named groups and store references
+		if (ctx.list || isEscaped(ctx)) { return true; }
+		const match = (/^(\w+)>/).exec(ctx.next);
+		if (!match) { throw new SyntaxError('Invalid group structure, expected named group'); }
+		if ((/^\d/).test(match[1])) { throw new SyntaxError('Invalid group structure, group name must not begin with a digit'); }
+		ctx.groups.push(match[1]);
+		ctx.next = ctx.next.slice(match[0].length);
+		ctx.now += '(';
+	},
+	[/\(/](ctx) { // find unnamed groups and ether write references or translate to non-capturing group ('n' flag)
+		if (ctx.list) { return true; }
+		if ((/^\?/).test(ctx.next)) { return true; }
+		if (ctx.nocapture) {
+			ctx.now += '(?:';
+		} else {
+			ctx.groups.push(null);
+			return true;
+		}
+	},
+	[/\#/](ctx) { // strip comments
+		if (ctx.list) { return true; }
+		if (isEscaped(ctx)) {
+			ctx.now = ctx.now.slice(0, -1) +'#';
+		} else {
+			ctx.next = ctx.next.replace(/^.*[^]/, '');
+		}
+	},
+	[/\//](ctx) { // find native flags
+		if (ctx.list) { return true; }
+		if (isEscaped(ctx)) {
+			ctx.now += '/';
+		} else {
+			if (ctx.source) { throw new SyntaxError('Invalid regular expression flags'); }
+			ctx.source = ctx.done + ctx.now;
+			ctx.done = ''; ctx.now = '';
+		}
+	},
+	[/\\\d/](ctx, digit) { // forbid octal escapes in the input
+		if (ctx.list) { return true; }
+		if ((/^\\0$/).test(digit)) {
+			if ((/^\s+\d/).test(ctx.next)) { ctx.now += digit +'(?:)'; return; }
+			else if ((/^\D|^$/).test(ctx.next)) { return true; }
+		}
+		throw new SyntaxError('Octal escapes are not allowed');
+	},
+	[/\\[A-Za-z]/](ctx, letter) { // forbid unnecessary escapes
+		if (ctx.list) { return true; }
+		letter = letter[1];
+		if ((/[dDwWsStrnvf]/).test(letter)) { return true; }
+		switch (letter) {
+			case 'c': {
+				if ((/^[A-Za-z]/).test(ctx.next)) { return true; }
+			} break;
+			case 'x': {
+				if ((/^[0-9A-Fa-f]{2}/).test(ctx.next)) { return true; }
+			} break;
+			case 'u': {
+				if ((/^[0-9A-Fa-f]{4}/).test(ctx.next)) { return true; }
+				if ((/^\{[0-9A-Fa-f]{4,5}\}/).test(ctx.next)) { return true; } // TODO: only allow if 'u' flag is set ?
+			} break;
+		}
+		throw new SyntaxError('Unnecessary escape of character "'+ letter +'"');
+	},
+};
+const tokens = new RegExp('(.*?)('+ Object.keys(parser).map(key => '('+ key.slice(1, -1) +')').join('|') +')', '');
+const replacers = Object.keys(parser).map(key => parser[key]);
+
+function parse(ctx, input) {
+	ctx.done = ''; ctx.now = ''; ctx.next = input;
+	while (ctx.next) {
+		const match = tokens.exec(ctx.next);
+		if (!match) { ctx.done += ctx.next; break; }
+		ctx.now = match[1];
+		ctx.next = ctx.next.slice(match[0].length);
+		const token = match[2];
+		const replacer = replacers[match.indexOf(token, 3) - 3];
+		if (replacer(ctx, token)) {
+			ctx.now += token;
+		}
+		ctx.done += ctx.now;
+	}
+	return ctx;
+}
+
+const $exec = RegExp.prototype.exec;
+const $$match = RegExp.prototype[Symbol.match];
+
+function extendExec(regExp, groups) {
+	function assignNames(match) {
+		match && groups.forEach((name, index) => name !== null && match[index] !== undefined && (match[name] = match[index]));
 		// console.log('matched', this, match);
 		return match;
 	}
-	[Symbol.match]() {
-		const match = super[Symbol.match](...arguments);
-		return this.assignNames(match);
-	}
-	exec() {
-		const match = super.exec(...arguments);
-		return this.assignNames(match);
-	}
+	regExp.exec = function() {
+		const match = $exec.apply(this, arguments);
+		return assignNames(match);
+	};
+	if (!$$match) { return; }
+	regExp[Symbol.match] = function() {
+		const match = $$match.apply(this, arguments);
+		return assignNames(match);
+	};
 }
 
 return RegExpX;
