@@ -1,42 +1,86 @@
-(function() { const _module = function RegExpX() { 'use strict';
+(() => { 'use strict'; const factory = function RegExpX(exports) { // This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0. If a copy of the MPL was not distributed with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+const native_name2flag = {
+	'global': 'g',
+	'insensitive': 'i',
+	'multiline': 'm',
+	'multiLne': 'm',
+	'unicode': 'u',
+	'sticky': 'y',
+};
+
+const added_name2flag = {
+	'nocapture': 'n',
+	'single': 's',
+	'singleLinie': 's',
+	'ungreedy': 'U',
+	'extra': 'X',
+	'eXtra': 'X',
+};
+
+const name2flag = Object.assign(added_name2flag, native_name2flag);
+
+const flag2name = {
+	'n': 'nocapture',
+	's': 'single',
+	'U': 'ungreedy',
+	'X': 'extra',
+
+	'g': 'global',
+	'i': 'insensitive',
+	'm': 'multiline',
+	'u': 'unicode',
+	'y': 'sticky',
+};
 
 /**
- * Turns a template string containing an extended RegExp, which may contain uninterpreted whitespaces
- * and # comments, into a regular RegExp object.
- * Must be called as a template string tagging function.
- * Since it uses the template strings '.raw' property, no additional escaping compared to regular RegExp
- * literal is required, except that whitespaces and '#' characters that are not to be removed need to be escaped.
- * Note: The sequence '${' needs to be escaped to '\${' or '$\{' and will then appear as '\${' or '$\{' in the resulting RegExp.
- * The usual flags 'gim(uy)' may follow the RegExp itself after a closing '/'.
- * Example:
- *     RegExpX`a` <= same as => /a/
- *     RegExpX`a/i` <= same as => /a/i
- *     RegExpX`[\n\ ] # newline or space
- *             \/ # an escaped slash
- *             \# not a comment
- *             /g` <= same as => /[\n\ ]\/##notacomment/g
- *     RegExpX`^ . * ? x / g i m` <= smae as => /^.*?x/gim
- * As a plus, you can also use variables in your RegExp's, e.g.:
- *     const newLine = /[\r\n]/;
- *     const sentence = /([\w\.\ 0-9]*)/; // (modifiers ignored)
- *     RegExpX`(${ sentence } (<br><\/br>)+ ${ newLine })+` <= same as => /(([\w\. 0-9]*)(<br><\/br>)+[\r\n])+/
+ * Transforms a template string into a RegExp object. May be called in two different ways:
+ *
+ * - to specify flags / options call like a normal function:
+ *     @param  {string|object}  options  Either a string of flag characters or an object of flags properties.
+ *         Examples:
+ *             'i' adds the native case insensitivity flag.
+ *             'gimuy' adds all native flags.
+ *             'g-im-uy' adds the flags 'g', 'm' and 'y', and removes the flags 'i' and 'u'.
+ *             { global: true, } adds the native 'g' flag.
+ *             { ungreedy: false, } removes the 'U' flag (if previously added).
+ *             'o' would add 'o' as a (unrecognised) native flag (which probably throws in the RegExp constructor).
+ *     @return {function}                The RegExpX function with the new options bound.
+ *                                       Can now be used to create RexExp objects with these options or can have more options bound.
+ *
+ * - to create a RegExp object call as a template string tag function:
+ *     Since it uses the template strings '.raw' property, no additional escaping compared to regular RegExp literal is required,
+ *     except that whitespaces and '#' characters that are not to be removed need to be escaped.
+ *     Note: The sequence '${' needs to be escaped to '\${' or '$\{' and will then appear as '\${' or '$\{' in the resulting RegExp.
+ *     @param  {object}  hasRaw          An object with a .raw property which is an array of strings.
+ *     @param  {...any}  substitutions   Additional values to substitute into the template string.
+ *     @invariant                        substitutions.length must be exactly hasRaw.raw.length - 1.
+ *     @return {RegExp}                  Enhanced RexExp object.
  */
-function RegExpX(options) {
-
-	const optionNames = { single: 's', ungreedy: 'U', nocapture: 'n', };
+const RegExpX = function RegExpX(/* options */) {
+	const options = this || { otherFlags: new Set, };
 
 	// not called as template string processor
-	if (!(options && options.raw && arguments.length === options.length)) {
-		// replace options by those encoded in the string
-		if (typeof options === 'string') { return RegExpX.bind(Object.keys(optionNames).reduce((ret, key) => ((ret[key] = options.includes(optionNames[key])), ret), { })); }
-		// add new options, overwriting existing ones
-		this && this !== exports && Object.keys(optionNames).forEach(key => !(key in options) && (key in this) && (options[key] = this[key]));
-		return RegExpX.bind(options);
+	if (!(typeof arguments[0] === 'object' && typeof arguments[0].raw === 'object' && arguments[0].raw.length === arguments.length)) {
+		if (typeof arguments[0] === 'string') {
+			// replace options by those encoded in the string
+			const left = arguments[0].replace(/(-?)([A-Za-z])/g, (_, remove, flag) => ((flag2name[flag]
+				? options[flag2name[flag]] = !remove
+				: options.otherFlags[remove ? 'delete' : 'add'](flag)
+			), ''));
+			if (!(/^\s*$/).test(left)) { throw new SyntaxError('Unrecognised characters in RegExpX flags: "'+ left +'"'); }
+			return RegExpX.bind(options);
+		} else if (typeof arguments[0] === 'object') {
+			// add new options, overwriting existing ones
+			const source = arguments[0];
+			Object.keys(source).forEach(key => name2flag.hasOwnProperty(key) && (options[key] = source[key]));
+			return RegExpX.bind(options);
+		}
+		throw new TypeError('RegExpX must be called like String.raw() or with a string or object as options');
 	}
+
 	// called as template string processor, get bound options
-	const _options = this && this !== exports ? this : { };
-	const ctx = { groups: [ null, ], };
-	Object.keys(optionNames).forEach(key => ctx[key] = _options[key]);
+	const ctx = { options, groups: [ null, ], };
 
 	// concat input
 	for (let i = 1, l = arguments.length; i < l; ++i) {
@@ -45,18 +89,16 @@ function RegExpX(options) {
 	const input = String.raw.apply(String, arguments); // get the string exactly as typed ==> no further escaping necessary
 
 	parse(ctx, input);
-	if (ctx.list) { RegExp('['); } // throws
-	if (ctx.source === undefined) {
-		ctx.source = ctx.done;
-	} else {
-		ctx.flags = ctx.done;
-	}
+	if (ctx.list) { RegExp('['); } // throws 'unterminated character class'
+	const source = ctx.done;
+	const flags = Object.keys(native_name2flag).map(name => options[name] ? native_name2flag[name] : '').concat(Array.from(options.otherFlags)).join('');
 
-	const regExp = new RegExp(ctx.source, ctx.flags);
+	const regExp = new RegExp(source, flags);
 	regExp.originalSource = input;
+	regExp.originalFlags = flags + Object.keys(added_name2flag).map(name => options[name] ? added_name2flag[name] : '').join('');
 	ctx.groups.some(_=>_) && extendExec(regExp, ctx.groups);
 	return regExp;
-}
+}.bind(null);
 
 function substitute(arg, groups) {
 	if (!arg) { return arg +''; }
@@ -103,10 +145,10 @@ const parser = {
 		return true;
 	},
 	[/\./](ctx) { // implement 's' flag
-		ctx.now += !ctx.list && ctx.single && !isEscaped(ctx) ? '[^]' : '.';
+		ctx.now += !ctx.list && ctx.options.single && !isEscaped(ctx) ? '[^]' : '.';
 	},
 	[/(?:\*|\+|\{\d+(?:\,\d*)?\})/](ctx) { // implement 'U' flag
-		if (!ctx.list && ctx.ungreedy && !isEscaped(ctx)) {
+		if (!ctx.list && ctx.options.ungreedy && !isEscaped(ctx)) {
 			ctx.next = ctx.next.replace(/^(\?)?/, (_, is) => is ? '' : '?');
 		}
 		return true;
@@ -130,7 +172,7 @@ const parser = {
 		} else if (name && ctx.groups.includes(name)) {
 			ctx.now += '\\'+ ctx.groups.indexOf(name);
 		} else {
-			throw new SyntaxError('Reference to non-existent subpattern "'+ (name || index) +'"');
+			throw new SyntaxError('Reference to non-existent sub pattern "'+ (name || index) +'"');
 		}
 	},
 	[/\(\?</](ctx) { // translate named groups and store references
@@ -145,7 +187,7 @@ const parser = {
 	[/\(/](ctx) { // find unnamed groups and ether write references or translate to non-capturing group ('n' flag)
 		if (ctx.list) { return true; }
 		if ((/^\?/).test(ctx.next)) { return true; }
-		if (ctx.nocapture) {
+		if (ctx.options.nocapture) {
 			ctx.now += '(?:';
 		} else {
 			ctx.groups.push(null);
@@ -160,16 +202,6 @@ const parser = {
 			ctx.next = ctx.next.replace(/^.*[^]/, '');
 		}
 	},
-	[/\//](ctx) { // find native flags
-		if (ctx.list) { return true; }
-		if (isEscaped(ctx)) {
-			ctx.now += '/';
-		} else {
-			if (ctx.source) { throw new SyntaxError('Invalid regular expression flags'); }
-			ctx.source = ctx.done + ctx.now;
-			ctx.done = ''; ctx.now = '';
-		}
-	},
 	[/\\\d/](ctx, digit) { // forbid octal escapes in the input
 		if (ctx.list) { return true; }
 		if ((/^\\0$/).test(digit)) {
@@ -179,7 +211,7 @@ const parser = {
 		throw new SyntaxError('Octal escapes are not allowed');
 	},
 	[/\\[A-Za-z]/](ctx, letter) { // forbid unnecessary escapes
-		if (ctx.list) { return true; }
+		if (!ctx.options.extra) { return true; }
 		letter = letter[1];
 		if ((/[dDwWsStrnvf]/).test(letter)) { return true; }
 		switch (letter) {
@@ -191,7 +223,10 @@ const parser = {
 			} break;
 			case 'u': {
 				if ((/^[0-9A-Fa-f]{4}/).test(ctx.next)) { return true; }
-				if ((/^\{[0-9A-Fa-f]{4,5}\}/).test(ctx.next)) { return true; } // TODO: only allow if 'u' flag is set ?
+				if ((/^\{[0-9A-Fa-f]{4,5}\}/).test(ctx.next)) {
+					if (ctx.options.unicode) { return true; }
+					throw new SyntaxError('Unnecessary escape of character "u" (u flag required)');
+				}
 			} break;
 		}
 		throw new SyntaxError('Unnecessary escape of character "'+ letter +'"');
@@ -239,16 +274,4 @@ function extendExec(regExp, groups) {
 
 return RegExpX;
 
-};
-
-if (typeof define === 'function'/* && define.amd*/) {
-	define(_module.name.toLowerCase(), [ ], _module);
-} else if (typeof exports === 'object' && typeof module === 'object') {
-	const result = _module(exports);
-	result && (module.exports = result);
-} else {
-	const result = _module(this[_module.name] = { });
-	result && (this[_module.name] = result);
-}
-
-})();
+}; if (typeof define === 'function' && define.amd) { define([ 'exports', ], factory); } else { const exports = { }, result = factory(exports) || exports; if (typeof exports === 'object' && typeof module === 'object') { module.exports = result; } else { window[factory.name] = result; } } })();
