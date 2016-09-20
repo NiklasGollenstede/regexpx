@@ -2,18 +2,18 @@ This module exports a single function which turns template strings into RegExp o
 
 ## New flags
 It adds support for the additional regular expression flags `n`, `s`, `U`, `x`, and `X` known from other languages:
-- `n`/nocapture: Turns all unnamed capturing groups into non-capturing groups.
-- `s`/singleLinie: Makes the . match newline characters.
-- `U`/ungreedy: Makes all greedy quantifiers ungreedy, and all ungreedy quantifiers greedy.
-- `x`/extended: Whitespaces and comments after # are ignored unless escaped. Is active by default and (currently) cant be turned off.
-- `X`/eXtra: Forbid unnecessary escapes. A `\` followed by a character (sequence) without special meaning is a SyntaxError.
+- `n`/`<b>n</b>oCapture`: Turns all unnamed capturing groups into non-capturing groups.
+- `s`/`<b>s</b>ingleLine`: Makes the . match newline characters.
+- `U`/`<b>u</b>ngreedy`: Makes all greedy quantifiers ungreedy, and all ungreedy quantifiers greedy.
+- `x`/`e<b>x</b>tended`: Whitespaces and comments after # are ignored unless escaped. Is active by default and (currently) cant be turned off.
+- `X`/`e<b>x</b>tra`: Forbid unnecessary escapes. A `\` followed by a character (sequence) without special meaning is a SyntaxError.
 
 ## New syntax:
 It adds support for the additional regular expression features:
 - Named capturing groups: ...
 - Forbid octal escapes in the input:
     <BR>Octal escapes are generally confusing and even more so in regular expressions.
-    <BR>The `\1` in /(.)\1/ is a reference to the capturing group (.), in /[.]\1/ it is the char with code 1.
+    <BR>The `\1` in `/(.)\1/` is a reference to the capturing group `(.)`, in `/[.]\1/` it is the char with code `1`.
     <BR>Therefore, and because octal escapes in template strings are (currently) SyntaxErrors themselves, thy are not allowed by RegExpX.
     <BR>To reference unnamed capturing groups, use `$1` or `\k<0>`
 

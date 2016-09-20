@@ -71,7 +71,7 @@ describe('"RegExpX" should', function() {
 		RegExpX('i')``.should.deep.equal((/(?:)/i));
 		RegExpX('')``.should.deep.equal((/(?:)/));
 		RegExpX('gim')`a`.should.deep.equal((/a/gim));
-		RegExpX({ insensitive: true, })``.should.deep.equal((/(?:)/i));
+		RegExpX({ ignoreCase: true, })``.should.deep.equal((/(?:)/i));
 		RegExpX({ multiline: true, })``.should.deep.equal((/(?:)/m));
 		RegExpX('gim')({ })``.should.deep.equal((/(?:)/gim));
 		RegExpX('gim')({ global: false, })``.should.deep.equal((/(?:)/im));
@@ -89,8 +89,9 @@ describe('"RegExpX" should', function() {
 		RegExpX('U')`a`.originalFlags.should.equal('U');
 		RegExpX('n')`a`.originalFlags.should.equal('n');
 		RegExpX({
-			'single': true, 'ungreedy': true, 'nocapture': true,
-		})`a`.originalFlags.should.equal('nsU');
+			singleLine: true, ungreedy: true, noCapture: true, extra: true,
+		})`a`.originalFlags.should.equal('nsUX');
+		(() => RegExpX({ nocapture: true, })).should.throw(TypeError);
 	});
 
 	it('disallow octal escapes (\\123)', () => {
@@ -102,41 +103,6 @@ describe('"RegExpX" should', function() {
 		(() => RegExpX`${ /\01/ }`).should.throw(SyntaxError);
 		(() => RegExpX`${ /\001/ }`).should.throw(SyntaxError);
 		(() => RegExpX`${ /\901/ }`).should.throw(SyntaxError);
-	});
-
-	it('disallow unnecessary escapes', () => {
-		[ RegExpX, RegExpX('X') ].forEach(RegExpX => {
-			RegExpX`\d\D\w\W\s\S\t\r\n\v\f`.should.deep.equal((/\d\D\w\W\s\S\t\r\n\v\f/));
-			RegExpX`\cM`.should.deep.equal((/\cM/));
-			RegExpX`\x0F`.should.deep.equal((/\x0F/));
-			RegExpX`\u12Af`.should.deep.equal((/\u12Af/));
-			RegExpX('u')`\u{12Af}`.should.deep.equal((/\u{12Af}/u));
-			RegExpX('u')`\u{12Af7}`.should.deep.equal((/\u{12Af7}/u));
-			RegExpX('u')`\ u{12345}`.should.deep.equal((/ u{12345}/u));
-		});
-
-		(() => RegExpX('X')('u')`\u{12Af7}`).should.not.throw(SyntaxError);
-		(() => RegExpX('X')('u')`${ /\u{12 Af}/ }`).should.throw(SyntaxError);
-		(() => RegExpX('X')('u')`${ /\u {12Af}/ }`).should.throw(SyntaxError);
-
-		(() => RegExpX('X')`\c M`).should.throw(SyntaxError);
-		(() => RegExpX('X')`\a`).should.throw(SyntaxError);
-		(() => RegExpX('X')`${ /\x1/ }`).should.throw(SyntaxError);
-		(() => RegExpX('X')`${ /\x1G/ }`).should.throw(SyntaxError);
-		(() => RegExpX('X')`${ /\x1 F/ }`).should.throw(SyntaxError);
-		(() => RegExpX('X')`${ /\u12/ }`).should.throw(SyntaxError);
-		(() => RegExpX('X')`${ /\u12 Af/ }`).should.throw(SyntaxError);
-		(() => RegExpX('X')(' ')`\u{12Af7}`).should.throw(SyntaxError);
-
-		(() => RegExpX`\c M`).should.not.throw(SyntaxError);
-		(() => RegExpX`\a`).should.not.throw(SyntaxError);
-		(() => RegExpX`${ /\x1/ }`).should.not.throw(SyntaxError);
-		(() => RegExpX`${ /\x1G/ }`).should.not.throw(SyntaxError);
-		(() => RegExpX`${ /\x1 F/ }`).should.not.throw(SyntaxError);
-		(() => RegExpX`${ /\u12/ }`).should.not.throw(SyntaxError);
-		(() => RegExpX`${ /\u12 Af/ }`).should.not.throw(SyntaxError);
-		(() => RegExpX(' ')`\u{12Af7}`).should.not.throw(SyntaxError);
-		(() => RegExpX('u')`${ /\u {12Af}/ }`).should.not.throw(SyntaxError);
 	});
 
 	it(`paste a regExp's .souce`, () => {
@@ -174,9 +140,9 @@ describe('"RegExpX" should', function() {
 		exp3.exec('+NO!').should.contain.all.keys({ word: 'NO', punctuation: '!', });
 	});
 
-	it(`accept the 's' (single) flag`, () => {
+	it(`accept the 's' (singleLine) flag`, () => {
 		RegExpX`.`.should.deep.equal((/./));
-		RegExpX({ single: true, })`.`.should.deep.equal((/[^]/));
+		RegExpX({ singleLine: true, })`.`.should.deep.equal((/[^]/));
 		RegExpX('s')`.`.should.deep.equal((/[^]/));
 		RegExpX('s')`\.`.should.deep.equal((/\./));
 		RegExpX('s')`.[.]`.should.deep.equal((/[^][.]/));
@@ -204,15 +170,51 @@ describe('"RegExpX" should', function() {
 		RegExpX('U')`${ '.*' }[${ more }]`.should.deep.equal((/\.\*[.*]/));
 	});
 
-	it(`accept the 'n' (nocapture) flag`, () => {
+	it(`accept the 'n' (noCapture) flag`, () => {
 		RegExpX`(.)`.should.deep.equal((/(.)/));
-		RegExpX({ nocapture: true, })`(.)`.should.deep.equal((/(?:.)/));
+		RegExpX({ noCapture: true, })`(.)`.should.deep.equal((/(?:.)/));
 		RegExpX('n')`(.)`.should.deep.equal((/(?:.)/));
 		RegExpX('n')`(?:.)`.should.deep.equal((/(?:.)/));
 		RegExpX('n')`(?!.)`.should.deep.equal((/(?!.)/));
 		RegExpX('n')`[(.)]`.should.deep.equal((/[(.)]/));
 		RegExpX('n')`(.)-${{ char: /\w/ }}`.should.deep.equal((/(?:.)-(?:(\w))/));
 		RegExpX('n')`(.)-${{ char: /\w/ }}`.exec('a-b').should.have.a.property('char', 'b');
+	});
+
+	it(`accept the 'X' (extra) flag (forbid unnecessary escapes)`, () => {
+		[ RegExpX, RegExpX('X') ].forEach(RegExpX => {
+			RegExpX`\d\D\w\W\s\S\t\r\n\v\f`.should.deep.equal((/\d\D\w\W\s\S\t\r\n\v\f/));
+			RegExpX`\cM`.should.deep.equal((/\cM/));
+			RegExpX`\x0F`.should.deep.equal((/\x0F/));
+			RegExpX`\u12Af`.should.deep.equal((/\u12Af/));
+			RegExpX('u')`\u{12Af}`.should.deep.equal((/\u{12Af}/u));
+			RegExpX('u')`\u{12Af7}`.should.deep.equal((/\u{12Af7}/u));
+			RegExpX('u')`\ u{12345}`.should.deep.equal((/ u{12345}/u));
+		});
+
+		(() => RegExpX({ extra: true, })`\a`).should.throw(SyntaxError);
+		(() => RegExpX('X')('u')`\u{12Af7}`).should.not.throw(SyntaxError);
+		(() => RegExpX('X')('u')`${ /\u{12 Af}/ }`).should.throw(SyntaxError);
+		(() => RegExpX('X')('u')`${ /\u {12Af}/ }`).should.throw(SyntaxError);
+
+		(() => RegExpX('X')`\c M`).should.throw(SyntaxError);
+		(() => RegExpX('X')`\a`).should.throw(SyntaxError);
+		(() => RegExpX('X')`${ /\x1/ }`).should.throw(SyntaxError);
+		(() => RegExpX('X')`${ /\x1G/ }`).should.throw(SyntaxError);
+		(() => RegExpX('X')`${ /\x1 F/ }`).should.throw(SyntaxError);
+		(() => RegExpX('X')`${ /\u12/ }`).should.throw(SyntaxError);
+		(() => RegExpX('X')`${ /\u12 Af/ }`).should.throw(SyntaxError);
+		(() => RegExpX('X')(' ')`\u{12Af7}`).should.throw(SyntaxError);
+
+		(() => RegExpX`\c M`).should.not.throw(SyntaxError);
+		(() => RegExpX`\a`).should.not.throw(SyntaxError);
+		(() => RegExpX`${ /\x1/ }`).should.not.throw(SyntaxError);
+		(() => RegExpX`${ /\x1G/ }`).should.not.throw(SyntaxError);
+		(() => RegExpX`${ /\x1 F/ }`).should.not.throw(SyntaxError);
+		(() => RegExpX`${ /\u12/ }`).should.not.throw(SyntaxError);
+		(() => RegExpX`${ /\u12 Af/ }`).should.not.throw(SyntaxError);
+		(() => RegExpX(' ')`\u{12Af7}`).should.not.throw(SyntaxError);
+		(() => RegExpX('u')`${ /\u {12Af}/ }`).should.not.throw(SyntaxError);
 	});
 
 	it(`translate references to captured groups`, () => {

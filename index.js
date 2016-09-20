@@ -2,32 +2,29 @@
 
 const native_name2flag = {
 	'global': 'g',
-	'insensitive': 'i',
+	'ignoreCase': 'i',
 	'multiline': 'm',
-	'multiLne': 'm',
 	'unicode': 'u',
 	'sticky': 'y',
 };
 
 const added_name2flag = {
-	'nocapture': 'n',
-	'single': 's',
-	'singleLinie': 's',
+	'noCapture': 'n',
+	'singleLine': 's',
 	'ungreedy': 'U',
 	'extra': 'X',
-	'eXtra': 'X',
 };
 
 const name2flag = Object.assign(added_name2flag, native_name2flag);
 
 const flag2name = {
-	'n': 'nocapture',
-	's': 'single',
+	'n': 'noCapture',
+	's': 'singleLine',
 	'U': 'ungreedy',
 	'X': 'extra',
 
 	'g': 'global',
-	'i': 'insensitive',
+	'i': 'ignoreCase',
 	'm': 'multiline',
 	'u': 'unicode',
 	'y': 'sticky',
@@ -73,7 +70,11 @@ const RegExpX = function RegExpX(/* options */) {
 		} else if (typeof arguments[0] === 'object') {
 			// add new options, overwriting existing ones
 			const source = arguments[0];
-			Object.keys(source).forEach(key => name2flag.hasOwnProperty(key) && (options[key] = source[key]));
+			Object.keys(source).forEach(key => { if (name2flag.hasOwnProperty(key)) {
+				options[key] = source[key];
+			} else {
+				throw new TypeError('Unrecognised RegExpX option "'+ key +'"');
+			} });
 			return RegExpX.bind(options);
 		}
 		throw new TypeError('RegExpX must be called like String.raw() or with a string or object as options');
@@ -145,7 +146,7 @@ const parser = {
 		return true;
 	},
 	[/\./](ctx) { // implement 's' flag
-		ctx.now += !ctx.list && ctx.options.single && !isEscaped(ctx) ? '[^]' : '.';
+		ctx.now += !ctx.list && ctx.options.singleLine && !isEscaped(ctx) ? '[^]' : '.';
 	},
 	[/(?:\*|\+|\{\d+(?:\,\d*)?\})/](ctx) { // implement 'U' flag
 		if (!ctx.list && ctx.options.ungreedy && !isEscaped(ctx)) {
@@ -187,7 +188,7 @@ const parser = {
 	[/\(/](ctx) { // find unnamed groups and ether write references or translate to non-capturing group ('n' flag)
 		if (ctx.list) { return true; }
 		if ((/^\?/).test(ctx.next)) { return true; }
-		if (ctx.options.nocapture) {
+		if (ctx.options.noCapture) {
 			ctx.now += '(?:';
 		} else {
 			ctx.groups.push(null);
