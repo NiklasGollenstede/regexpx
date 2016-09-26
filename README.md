@@ -2,11 +2,11 @@ This module exports a single function which turns template strings into RegExp o
 
 ## New flags
 It adds support for the additional regular expression flags `n`, `s`, `U`, `x`, and `X` known from other languages:
-- `n`/`<b>n</b>oCapture`: Turns all unnamed capturing groups into non-capturing groups.
-- `s`/`<b>s</b>ingleLine`: Makes the . match newline characters.
-- `U`/`<b>u</b>ngreedy`: Makes all greedy quantifiers ungreedy, and all ungreedy quantifiers greedy.
-- `x`/`e<b>x</b>tended`: Whitespaces and comments after # are ignored unless escaped. Is active by default and (currently) cant be turned off.
-- `X`/`e<b>x</b>tra`: Forbid unnecessary escapes. A `\` followed by a character (sequence) without special meaning is a SyntaxError.
+- `n`/`noCapture`: Turns all unnamed capturing groups into non-capturing groups.
+- `s`/`singleLine`: Makes the . match newline characters.
+- `U`/`ungreedy`: Makes all greedy quantifiers ungreedy, and all ungreedy quantifiers greedy.
+- `x`/`extended`: Whitespaces and comments after # are ignored unless escaped. Is active by default and (currently) cant be turned off.
+- `X`/`extra`: Forbid unnecessary escapes. A `\` followed by a character (sequence) without special meaning is a SyntaxError.
 
 ## New syntax:
 It adds support for the additional regular expression features:
@@ -25,7 +25,7 @@ It adds support for the additional regular expression features:
 - object: ...
 
 ## API:
-```
+```js
 const RegExpX = require('regexpx') || window.RegExpX; // CommonJS
 /**
  * Transforms a template string into a RegExp object. May be called in two different ways:

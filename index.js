@@ -30,6 +30,8 @@ const flag2name = {
 	'y': 'sticky',
 };
 
+const instances = new WeakSet;
+
 /**
  * Transforms a template string into a RegExp object. May be called in two different ways:
  *
@@ -85,7 +87,7 @@ const RegExpX = function RegExpX(/* options */) {
 
 	// concat input
 	for (let i = 1, l = arguments.length; i < l; ++i) {
-		arguments[i] = substitute(arguments[i], ctx.groupNames);
+		arguments[i] = substitute(arguments[i], i);
 	}
 	const input = String.raw.apply(String, arguments); // get the string exactly as typed ==> no further escaping necessary
 
@@ -95,25 +97,25 @@ const RegExpX = function RegExpX(/* options */) {
 	const flags = Object.keys(native_name2flag).map(name => options[name] ? native_name2flag[name] : '').concat(Array.from(options.otherFlags)).join('');
 
 	const regExp = new RegExp(source, flags);
-	regExp.originalSource = input;
-	regExp.originalFlags = flags + Object.keys(added_name2flag).map(name => options[name] ? added_name2flag[name] : '').join('');
+	setHiddenConst(regExp, 'originalSource', input);
+	setHiddenConst(regExp, 'originalFlags', flags + Object.keys(added_name2flag).map(name => options[name] ? added_name2flag[name] : '').join(''));
 	ctx.groups.some(_=>_) && extendExec(regExp, ctx.groups);
+	instances.add(regExp);
 	return regExp;
 }.bind(null);
 
-function substitute(arg, groups) {
-	if (!arg) { return arg +''; }
+function substitute(arg, pos) {
 	if (typeof arg === 'string') { return escape(arg); }
-	if (arg.source && arg.toString && arg.toString().startsWith(arg.source, 1)) { return arg.source; }
+	if (typeof arg !== 'object') { throw new TypeError(`Bad type for substitution value: ${ typeof arg } at value ${ pos }`); }
+	if (typeof arg.originalSource === 'string') { return arg.originalSource; }
+	if (typeof arg.source === 'string') { return arg.source; }
 	if (Array.isArray(arg)) {
-		return '(?:'+ arg.map(item => substitute(item, groups)).join('|') +')';
+		return '(?:'+ arg.map(item => substitute(item, pos)).join('|') +')';
 	}
-	if (typeof arg === 'object') {
-		return '(?:'+ Object.keys(arg).map(key => {
-			return '(?<'+ key +'>'+ substitute(arg[key], groups) +')';
-		}).join('|') +')';
-	}
-	return escape(arg +'');
+	return '(?:'+ Object.keys(arg).map(key => {
+		if (!(/^[A-Za-z_]\w*$/).test(key)) { throw new SyntaxError('Invalid group structure, group name must be words and not begin with a digit'); }
+		return '(?<'+ key +'>'+ substitute(arg[key], pos) +')';
+	}).join('|') +')';
 }
 
 function escape(string) {
@@ -121,7 +123,14 @@ function escape(string) {
 }
 
 function isEscaped(ctx) {
-	return ctx.now.match(/\\*$/)[0].length % 2 === 1;
+	return isEscapedAt(ctx.now);
+}
+function isEscapedAt(string, index = string.length - 1) {
+	let i = index;
+	while (
+		i >= 0 && string[i] === '\\'
+	) { --i; }
+	return (index - i) % 2 === 1;
 }
 
 const parser = {
@@ -130,9 +139,12 @@ const parser = {
 		if (isEscaped(ctx)) {
 			ctx.now = ctx.now.slice(0, -1) + wsp;
 		} else {
-			const match = (/(.)([^\(\)\[\]\{\}\$\|\*\+\\\?]*?)$/).exec(ctx.now);
-			if (!match || isEscaped({ now: ctx.now.slice(0, -match[0].length), })) { return; }
-			switch (match[1]) { // insert (?:) if potentially within { }-quantifier or escape sequence
+			let s = ctx.now, i = s.length;
+			while (
+				i >= 0 && (/[^\(\)\[\]\{\}\$\|\*\+\\\?]/).test(s[i])
+			) { --i; }
+			if (i < 0 || isEscapedAt(s, i)) { return; }
+			switch (s[i]) { // insert (?:) if potentially within { }-quantifier or escape sequence
 				case '{': ctx.now += '(?:)'; break;
 			}
 		}
@@ -254,7 +266,7 @@ function parse(ctx, input) {
 }
 
 const $exec = RegExp.prototype.exec;
-const $$match = RegExp.prototype[Symbol.match];
+const $$match = Symbol.match && RegExp.prototype[Symbol.match];
 
 function extendExec(regExp, groups) {
 	function assignNames(match) {
@@ -262,17 +274,29 @@ function extendExec(regExp, groups) {
 		// console.log('matched', this, match);
 		return match;
 	}
-	regExp.exec = function() {
+	setHiddenConst(regExp, 'exec', function exec() {
 		const match = $exec.apply(this, arguments);
 		return assignNames(match);
-	};
+	});
 	if (!$$match) { return; }
-	regExp[Symbol.match] = function() {
+	setHiddenConst(regExp, Symbol.match, function() {
 		const match = $$match.apply(this, arguments);
 		return assignNames(match);
-	};
+	});
 }
 
-return RegExpX;
+function setHiddenConst(object, key, value) {
+	return Object.defineProperty(object, key, { value, writable: false, enumerable: false, configurable: false, });
+}
+
+const $compile = RegExp.prototype.compile;
+RegExp.prototype.compile = function() {
+	if (instances.has(this)) {
+		throw new Error('RegExpX objects can not be recompiled');
+	}
+	return $compile.apply(this, arguments);
+};
+
+return (RegExpX.RegExpX = RegExpX);
 
 }; if (typeof define === 'function' && define.amd) { define([ 'exports', ], factory); } else { const exports = { }, result = factory(exports) || exports; if (typeof exports === 'object' && typeof module === 'object') { module.exports = result; } else { window[factory.name] = result; } } })();

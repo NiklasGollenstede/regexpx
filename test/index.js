@@ -105,10 +105,14 @@ describe('"RegExpX" should', function() {
 		(() => RegExpX`${ /\901/ }`).should.throw(SyntaxError);
 	});
 
-	it(`paste a regExp's .souce`, () => {
+	it(`paste an objects/RegExp's .originalSource/.souce property value`, () => {
 		const newLine = /(?:\r\n?|\n)/;
 		const sentence = /([\w\.\ 0-9]*)/gim;
 		RegExpX`(${ sentence } (<br><\/br>)+ ${ newLine })+`.should.deep.equal((/(([\w\.\ 0-9]*)(<br><\/br>)+(?:\r\n?|\n))+/));
+		const noCapture = RegExpX('n')`(.)`;
+		RegExpX`a${ noCapture }b`.should.deep.equal((/a(.)b/));
+		const named = RegExpX`${ { foo: 'bar', } }`;
+		RegExpX`a${ named }b`.exec('abarb').should.have.a.property('foo', 'bar');
 	});
 
 	it(`escape string substitutions`, () => {
@@ -138,6 +142,17 @@ describe('"RegExpX" should', function() {
 		'+20'.match(exp3).should.have.a.property('number', '20');
 		'-hello'.match(exp3).should.have.a.property('word', 'hello');
 		exp3.exec('+NO!').should.contain.all.keys({ word: 'NO', punctuation: '!', });
+	});
+
+	it(`throw for bad substitution types`, () => {
+		(() => RegExpX`a${ null }b`).should.throw(TypeError);
+		(() => RegExpX`a${ undefined }b`).should.throw(TypeError);
+		(() => RegExpX`a${ 42 }b`).should.throw(TypeError);
+		(() => RegExpX`a${ NaN }b`).should.throw(TypeError);
+		(() => RegExpX`a${ 0 }b`).should.throw(TypeError);
+		(() => RegExpX`a${ function() { } }b`).should.throw(TypeError);
+		(() => RegExpX`a${ x => x }b`).should.throw(TypeError);
+		(() => RegExpX`a${ Symbol() }b`).should.throw(TypeError);
 	});
 
 	it(`accept the 's' (singleLine) flag`, () => {
