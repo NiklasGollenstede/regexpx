@@ -5,15 +5,16 @@ It adds support for the additional regular expression flags `n`, `s`, `U`, `x`, 
 - `n`/`noCapture`: Turns all unnamed capturing groups into non-capturing groups.
 - `s`/`singleLine`: Makes the . match newline characters.
 - `U`/`ungreedy`: Makes all greedy quantifiers ungreedy, and all ungreedy quantifiers greedy.
-- `x`/`extended`: Whitespaces and comments after # are ignored unless escaped. Is active by default and (currently) cant be turned off.
+- `x`/`extended`: Whitespaces and comments after # are ignored unless escaped. Is active by default and (currently) can't be turned off.
 - `X`/`extra`: Forbid unnecessary escapes. A `\` followed by a character (sequence) without special meaning is a SyntaxError.
 
 ## New syntax:
 It adds support for the additional regular expression features:
 - Named capturing groups: ...
 - Forbid octal escapes in the input:
-    <BR>Octal escapes are generally confusing and even more so in regular expressions.
-    <BR>The `\1` in `/(.)\1/` is a reference to the capturing group `(.)`, in `/[.]\1/` it is the char with code `1`.
+    <BR>Octal escapes are generally confusing and even more so in regular expressions:
+    <BR>The `\10` in `/(.)(.)(.)(.)(.)(.)(.)(.)(.)(x)\10/` is a reference to the capturing group `(x)`.
+    <BR>The `\10` in `/(.)(.)(.)(.)(.)(.)(.)(.)(.)[x]\10/` it is the char with code `8`.
     <BR>Therefore, and because octal escapes in template strings are (currently) SyntaxErrors themselves, thy are not allowed by RegExpX.
     <BR>To reference unnamed capturing groups, use `$1` or `\k<0>`
 

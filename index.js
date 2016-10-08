@@ -57,7 +57,7 @@ const instances = new WeakSet;
  *     @return {RegExp}                  Enhanced RexExp object.
  */
 const RegExpX = function RegExpX(/* options */) {
-	const options = this || { otherFlags: new Set, };
+	const options = this && typeof this.otherFlags === 'string' ? Object.assign({ }, this) : { otherFlags: '', };
 
 	// not called as template string processor
 	if (!(typeof arguments[0] === 'object' && typeof arguments[0].raw === 'object' && arguments[0].raw.length === arguments.length)) {
@@ -65,7 +65,7 @@ const RegExpX = function RegExpX(/* options */) {
 			// replace options by those encoded in the string
 			const left = arguments[0].replace(/(-?)([A-Za-z])/g, (_, remove, flag) => ((flag2name[flag]
 				? options[flag2name[flag]] = !remove
-				: options.otherFlags[remove ? 'delete' : 'add'](flag)
+				: options.otherFlags = options.otherFlags.replace(new RegExp(flag +'|$'), remove ? '' : flag)
 			), ''));
 			if (!(/^\s*$/).test(left)) { throw new SyntaxError('Unrecognised characters in RegExpX flags: "'+ left +'"'); }
 			return RegExpX.bind(options);
@@ -94,7 +94,7 @@ const RegExpX = function RegExpX(/* options */) {
 	parse(ctx, input);
 	if (ctx.list) { RegExp('['); } // throws 'unterminated character class'
 	const source = ctx.done;
-	const flags = Object.keys(native_name2flag).map(name => options[name] ? native_name2flag[name] : '').concat(Array.from(options.otherFlags)).join('');
+	const flags = Object.keys(native_name2flag).map(name => options[name] ? native_name2flag[name] : '').join('') + options.otherFlags;
 
 	const regExp = new RegExp(source, flags);
 	setHiddenConst(regExp, 'originalSource', input);
@@ -123,14 +123,16 @@ function escape(string) {
 }
 
 function isEscaped(ctx) {
-	return isEscapedAt(ctx.now);
+	return isEscapeingAt(ctx.now, ctx.now.length);
 }
-function isEscapedAt(string, index = string.length - 1) {
-	let i = index;
+// checks whether the string is escaping the char at index
+function isEscapeingAt(string, index) {
+	if (index === 0) { return false; }
+	let i = index - 1, found = 0;
 	while (
 		i >= 0 && string[i] === '\\'
 	) { --i; }
-	return (index - i) % 2 === 1;
+	return (index - i) % 2 === 0;
 }
 
 const parser = {
@@ -143,9 +145,14 @@ const parser = {
 			while (
 				i >= 0 && (/[^\(\)\[\]\{\}\$\|\*\+\\\?]/).test(s[i])
 			) { --i; }
-			if (i < 0 || isEscapedAt(s, i)) { return; }
+			if (i < 0 || isEscapeingAt(s, i)) { return; }
 			switch (s[i]) { // insert (?:) if potentially within { }-quantifier or escape sequence
 				case '{': ctx.now += '(?:)'; break;
+				case '\\': switch (s[i + 1]) {
+					case 'c': s.length - i <= 1 && (ctx.now += '(?:)'); break;
+					case 'x': s.length - i <= 2 && (ctx.now += '(?:)'); break;
+					case 'u': s.length - i <= 4 && (ctx.now += '(?:)'); break;
+				}
 			}
 		}
 	},
@@ -223,9 +230,9 @@ const parser = {
 		}
 		throw new SyntaxError('Octal escapes are not allowed');
 	},
-	[/\\[A-Za-z]/](ctx, letter) { // forbid unnecessary escapes
-		if (!ctx.options.extra) { return true; }
-		letter = letter[1];
+	[/\\[A-Za-z]/](ctx, found) { // forbid unnecessary escapes
+		if (!ctx.options.extra) { ctx.next = found + ctx.next; return 2; }
+		const letter = found[1];
 		if ((/[dDwWsStrnvf]/).test(letter)) { return true; }
 		switch (letter) {
 			case 'c': {
@@ -245,20 +252,26 @@ const parser = {
 		throw new SyntaxError('Unnecessary escape of character "'+ letter +'"');
 	},
 };
-const tokens = new RegExp('(.*?)('+ Object.keys(parser).map(key => '('+ key.slice(1, -1) +')').join('|') +')', '');
+const tokens = new RegExp('(.*?)('+ Object.keys(parser).map(key => '('+ key.slice(1, -1) +')').join('|') +')', 'g');
 const replacers = Object.keys(parser).map(key => parser[key]);
 
 function parse(ctx, input) {
 	ctx.done = ''; ctx.now = ''; ctx.next = input;
+	let skip = 0;
 	while (ctx.next) {
+		tokens.lastIndex = skip;
 		const match = tokens.exec(ctx.next);
 		if (!match) { ctx.done += ctx.next; break; }
-		ctx.now = match[1];
-		ctx.next = ctx.next.slice(match[0].length);
+		ctx.now = ctx.next.slice(0, skip) + match[1];
+		ctx.next = ctx.next.slice(skip + match[0].length);
 		const token = match[2];
 		const replacer = replacers[match.indexOf(token, 3) - 3];
-		if (replacer(ctx, token)) {
+		const res = replacer(ctx, token);
+		if (res === true) {
 			ctx.now += token;
+			skip = 0;
+		} else {
+			skip = res || 0;
 		}
 		ctx.done += ctx.now;
 	}

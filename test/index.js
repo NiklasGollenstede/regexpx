@@ -58,6 +58,13 @@ describe('"RegExpX" should', function() {
 		exp2.test('a{1,3}').should.be.true; // /a{(?:)1,3}/
 		exp2.test('aa').should.be.false; // /a{1,3}/
 
+		'u12Af'.should.match(RegExpX`${ /^\u12 Af$/ }`);
+		(() => RegExpX('X')`${ /^\u12 Af$/ }`).should.throw(SyntaxError);
+		RegExpX`${ /^\u{123 Af}$/ }`.should.deep.equal((/^\u{123(?:)Af}$/));
+		(() => RegExpX('X')`${ /\u{123 Af}/ }`).should.throw(SyntaxError);
+		(() => RegExpX('u')`${ /\u {12Af}/ }`).should.throw(SyntaxError);
+		(() => RegExpX('X')`${ /\u {12Af}/ }`).should.throw(SyntaxError);
+
 		// TODO: more tests
 	});
 
@@ -82,6 +89,8 @@ describe('"RegExpX" should', function() {
 		RegExpX('gimuy')`a`.should.deep.equal((/a/gimuy));
 		RegExpX('imuy')('g-m-y')`a`.should.deep.equal((/a/giu));
 		RegExpX('im')('-mg')`a`.should.deep.equal((/a/gi));
+		(() => RegExpX('t')).should.not.throw();
+		(() => RegExpX('t')`a`).should.throw(SyntaxError);
 	});
 
 	it('recognize added flags', () => {
@@ -229,7 +238,6 @@ describe('"RegExpX" should', function() {
 		(() => RegExpX`${ /\u12/ }`).should.not.throw(SyntaxError);
 		(() => RegExpX`${ /\u12 Af/ }`).should.not.throw(SyntaxError);
 		(() => RegExpX(' ')`\u{12Af7}`).should.not.throw(SyntaxError);
-		(() => RegExpX('u')`${ /\u {12Af}/ }`).should.not.throw(SyntaxError);
 	});
 
 	it(`translate references to captured groups`, () => {
