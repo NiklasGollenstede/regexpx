@@ -145,12 +145,12 @@ describe('"RegExpX" should', function() {
 		'?'.match(exp1).should.have.a.property('question', '?');
 
 		const exp2 = RegExpX`${ punctuation }${ punctuation }${ punctuation }`;
-		'?!.'.match(exp2).should.contain.all.keys({ question: '?', exclamation: '!', sentence: '.', });
+		Object.assign({ }, '?!.'.match(exp2)).should.include({ question: '?', exclamation: '!', sentence: '.', });
 
 		const exp3 = RegExpX`(\+|-)${{ word: /[A-z]+/, number: /\d+/, }} ( ${{ punctuation: /[?!.]/, }} )?`;
 		'+20'.match(exp3).should.have.a.property('number', '20');
 		'-hello'.match(exp3).should.have.a.property('word', 'hello');
-		exp3.exec('+NO!').should.contain.all.keys({ word: 'NO', punctuation: '!', });
+		Object.assign({ }, exp3.exec('+NO!')).should.include({ word: 'NO', punctuation: '!', });
 	});
 
 	it(`throw for bad substitution types`, () => {
@@ -263,6 +263,42 @@ describe('"RegExpX" should', function() {
 		(() => RegExpX`(?<char>\w)$<ch ar>`).should.throw(SyntaxError);
 		(() => RegExpX`${{ $: /\w/ }}`).should.throw(SyntaxError);
 		(() => RegExpX`${{ '': /\w/ }}`).should.throw(SyntaxError);
+	});
+
+	it(`translate atomic groups`, () => {
+		RegExpX`(?>a)`.should.deep.equal((/(?=(a))\1/));
+		RegExpX`(?>(a))`.should.deep.equal((/(?=((a)))\1/));
+		RegExpX`(?>(a[)]))`.should.deep.equal((/(?=((a[)])))\1/));
+		RegExpX`(?>(a[(]))`.should.deep.equal((/(?=((a[(])))\1/));
+		RegExpX`(?>(a\())`.should.deep.equal((/(?=((a\()))\1/));
+		RegExpX`(?>(a\)))`.should.deep.equal((/(?=((a\))))\1/));
+		RegExpX`(?>a)(.)`.should.deep.equal((/(?=(a))\1(.)/));
+		Object.assign({ }, RegExpX`(?>a)(.)`.exec('ab')).should.deep.equal({ 0: 'ab', 1: 'b', index: 0, input: 'ab', });
+		RegExpX`(?>a*)${ { foo: 'bar', } }`.exec('aaabar').should.have.a.property('foo', 'bar');
+		RegExpX`(?>a*)${ { foo: 'bar', } }`.exec('aaabar').should.have.length(2);
+		RegExpX`(?>a*)${ { foo: 'bar', } }(?>a*)${ { bar: 'foo', } }`.exec('aaabaraaafoo').should.include.keys('foo', 'bar');
+		RegExpX`(?>a*)${ { foo: 'bar', } }(?>a*)${ { bar: 'foo', } }`.exec('aaabaraaafoo').should.have.length(3);
+	});
+
+	it(`translate possessive quantifiers`, () => {
+		RegExpX`a++`.should.deep.equal((/(?=(a+))\1/));
+		RegExpX`a?+`.should.deep.equal((/(?=(a?))\1/));
+		RegExpX`a*+`.should.deep.equal((/(?=(a*))\1/));
+		RegExpX`a{3}+`.should.deep.equal((/(?=(a{3}))\1/));
+		RegExpX`a{1,5}+`.should.deep.equal((/(?=(a{1,5}))\1/));
+		RegExpX`(a)++`.should.deep.equal((/(?=((a)+))\1/));
+		RegExpX`(a[)])++`.should.deep.equal((/(?=((a[)])+))\1/));
+		RegExpX`(a[(])++`.should.deep.equal((/(?=((a[(])+))\1/));
+		RegExpX`(a\()++`.should.deep.equal((/(?=((a\()+))\1/));
+		RegExpX`(a\))++`.should.deep.equal((/(?=((a\))+))\1/));
+		RegExpX`a++(.)`.should.deep.equal((/(?=(a+))\1(.)/));
+		Object.assign({ }, RegExpX`a++(.)`.exec('ab')).should.deep.equal({ 0: 'ab', 1: 'b', index: 0, input: 'ab', });
+		RegExpX`(a)*+${ { foo: 'bar', } }`.exec('aaabar').should.have.a.property('foo', 'bar');
+		RegExpX`(a)*+${ { foo: 'bar', } }`.exec('aaabar').should.have.length(3);
+		RegExpX`a*+${ { foo: 'bar', } }`.exec('aaabar').should.have.a.property('foo', 'bar');
+		RegExpX`a*+${ { foo: 'bar', } }`.exec('aaabar').should.have.length(2);
+		RegExpX`a*+${ { foo: 'bar', } }a*+${ { bar: 'foo', } }`.exec('aaabaraaafoo').should.include.keys('foo', 'bar');
+		RegExpX`a*+${ { foo: 'bar', } }a*+${ { bar: 'foo', } }`.exec('aaabaraaafoo').should.have.length(3);
 	});
 
 	it('have .originalSource and .originalFlags', () => {

@@ -99,7 +99,7 @@ const RegExpX = function RegExpX(/* options */) {
 	const regExp = new RegExp(source, flags);
 	setHiddenConst(regExp, 'originalSource', input);
 	setHiddenConst(regExp, 'originalFlags', flags + Object.keys(added_name2flag).map(name => options[name] ? added_name2flag[name] : '').join(''));
-	ctx.groups.some(_=>_) && extendExec(regExp, ctx.groups);
+	ctx.groups.some(_=>_ != null) && extendExec(regExp, ctx.groups);
 	instances.add(regExp);
 	return regExp;
 }.bind(null);
@@ -167,12 +167,6 @@ const parser = {
 	[/\./](ctx) { // implement 's' flag
 		ctx.now += !ctx.list && ctx.options.singleLine && !isEscaped(ctx) ? '[^]' : '.';
 	},
-	[/(?:\*|\+|\{\d+(?:\,\d*)?\})/](ctx) { // implement 'U' flag
-		if (!ctx.list && ctx.options.ungreedy && !isEscaped(ctx)) {
-			ctx.next = ctx.next.replace(/^(\?)?/, (_, is) => is ? '' : '?');
-		}
-		return true;
-	},
 	[/(?:\$\d|\$<|\\k<)/](ctx, group) { // resolve group references
 		if (ctx.list) { return true; }
 		let index, name;
@@ -195,6 +189,67 @@ const parser = {
 			throw new SyntaxError('Reference to non-existent sub pattern "'+ (name || index) +'"');
 		}
 	},
+	[/\(\?>/](ctx) { // replace atomic groups with capturing lookaheads
+		if (ctx.list || isEscaped(ctx)) { return true; }
+		if (isEscaped(ctx)) { return true; }
+		let s = ctx.next, i = 0, l = s.length, level = 1, skip = false;
+		while (i < l && level > 0) { switch (s[i]) {
+			case '[': !isEscapeingAt(s, i) && (skip = true); break;
+			case ']': !isEscapeingAt(s, i) && (skip = false); break;
+			case '(': !skip && !isEscapeingAt(s, i) && ++level; break;
+			case ')': !skip && !isEscapeingAt(s, i) && --level; break;
+		} ++i; }
+		const contents = ctx.next.slice(0, i - 1);
+		ctx.next = ctx.next.slice(i);
+		const index = ctx.groups.push(false) - 1;
+		ctx.next = contents +'))\\'+ index + ctx.next;
+		ctx.now += '(?=(';
+	},
+	[/(?:\*|\+|\?|\{\d+(?:\,\d*)?\})/](ctx, found) { // implement 'U' flag and replace possessive quantifiers with capturing lookaheads
+		if (ctx.list || isEscaped(ctx)) { return true; }
+		if (ctx.next[0] !== '+') {
+			if (ctx.options.ungreedy) { // 'U' flag
+				if (ctx.next[0] === '?') {
+					ctx.next = ctx.next.slice(1);
+				} else {
+					ctx.now = ctx.now + found + '?';
+					return false;
+				}
+			}
+			return true;
+		}
+		// possessive quantifiers
+		ctx.now = ctx.done + ctx.now; ctx.done = '';
+		let s = ctx.now, i = s.length - 1, back = 0;
+		switch (true) {
+			case s[i] === ']': {
+				do {
+					i = s.lastIndexOf('[', i - 1);
+				} while (isEscapeingAt(s, i));
+			} break;
+			case s[i] === ')' && !isEscapeingAt(s, i): {
+				let level = 1, skip = false;
+				while (i >= 0 && level > 0) { --i; switch (s[i]) {
+					case ']': !isEscapeingAt(s, i) && (skip = true); break;
+					case '[': !isEscapeingAt(s, i) && (skip = false); break;
+					case ')': !skip && !isEscapeingAt(s, i) && ++level; break;
+					case '(': if (!skip && !isEscapeingAt(s, i)) {
+						s[i + 1] !== '?' && ++back;
+						--level;
+					} break;
+				} }
+			} break;
+			default: {
+				i -= isEscapeingAt(s, i);
+			}
+		}
+		const contents = ctx.now.slice(i) + found;
+		ctx.now = ctx.now.slice(0, i);
+		const index = ctx.groups.length - back;
+		ctx.groups.splice(index, 0, false);
+		ctx.next = ctx.next.slice(1);
+		ctx.now += '(?=('+ contents +'))\\'+ index;
+	},
 	[/\(\?</](ctx) { // translate named groups and store references
 		if (ctx.list || isEscaped(ctx)) { return true; }
 		const match = (/^(\w+)>/).exec(ctx.next);
@@ -205,7 +260,7 @@ const parser = {
 		ctx.now += '(';
 	},
 	[/\(/](ctx) { // find unnamed groups and ether write references or translate to non-capturing group ('n' flag)
-		if (ctx.list) { return true; }
+		if (ctx.list || isEscaped(ctx)) { return true; }
 		if ((/^\?/).test(ctx.next)) { return true; }
 		if (ctx.options.noCapture) {
 			ctx.now += '(?:';
@@ -222,12 +277,16 @@ const parser = {
 			ctx.next = ctx.next.replace(/^.*[^]/, '');
 		}
 	},
-	[/\\\d/](ctx, digit) { // forbid octal escapes in the input
+	[/\\\d/](ctx, found) { // forbid octal escapes in the input
 		if (ctx.list) { return true; }
-		if ((/^\\0$/).test(digit)) {
-			if ((/^\s+\d/).test(ctx.next)) { ctx.now += digit +'(?:)'; return; }
+		const digit = found[1];
+		if (digit === '0') {
+			if ((/^\s+\d/).test(ctx.next)) { ctx.now += found +'(?:)'; return; }
 			else if ((/^\D|^$/).test(ctx.next)) { return true; }
+			// throw new SyntaxError('Octal escapes are not allowed');
 		}
+		const index = +(digit + (/^\d*/).exec(ctx.next)[0]);
+		if (ctx.groups[index] === false) { return true; }
 		throw new SyntaxError('Octal escapes are not allowed');
 	},
 	[/\\[A-Za-z]/](ctx, found) { // forbid unnecessary escapes
@@ -283,8 +342,11 @@ const $$match = Symbol.match && RegExp.prototype[Symbol.match];
 
 function extendExec(regExp, groups) {
 	function assignNames(match) {
-		match && groups.forEach((name, index) => name !== null && match[index] !== undefined && (match[name] = match[index]));
-		// console.log('matched', this, match);
+		if (!match) { return match; }
+		for (let i = 0, r = 0, l = match.length; i < l; ++i) {
+			if (groups[i] === false) { match.splice(i - r++, 1); }
+			else if (groups[i] && match[i - r] !== undefined) { match[groups[i]] = match[i - r]; }
+		}
 		return match;
 	}
 	setHiddenConst(regExp, 'exec', function exec() {
