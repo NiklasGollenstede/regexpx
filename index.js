@@ -149,9 +149,9 @@ const parser = {
 			switch (s[i]) { // insert (?:) if potentially within { }-quantifier or escape sequence
 				case '{': ctx.now += '(?:)'; break;
 				case '\\': switch (s[i + 1]) {
-					case 'c': s.length - i <= 1 && (ctx.now += '(?:)'); break;
-					case 'x': s.length - i <= 2 && (ctx.now += '(?:)'); break;
-					case 'u': s.length - i <= 4 && (ctx.now += '(?:)'); break;
+					case 'c': s.length - i <= 2 && (ctx.now = s.slice(0, i) + s.slice(i + 1)); break;
+					case 'x': s.length - i <= 3 && (ctx.now = s.slice(0, i) + s.slice(i + 1)); break;
+					case 'u': s.length - i <= 5 && (ctx.now = s.slice(0, i) + s.slice(i + 1)); break;
 				}
 			}
 		}
@@ -191,7 +191,6 @@ const parser = {
 	},
 	[/\(\?>/](ctx) { // replace atomic groups with capturing lookaheads
 		if (ctx.list || isEscaped(ctx)) { return true; }
-		if (isEscaped(ctx)) { return true; }
 		let s = ctx.next, i = 0, l = s.length, level = 1, skip = false;
 		while (i < l && level > 0) { switch (s[i]) {
 			case '[': !isEscapeingAt(s, i) && (skip = true); break;
@@ -353,8 +352,7 @@ function extendExec(regExp, groups) {
 		const match = $exec.apply(this, arguments);
 		return assignNames(match);
 	});
-	if (!$$match) { return; }
-	setHiddenConst(regExp, Symbol.match, function() {
+	$$match && setHiddenConst(regExp, Symbol.match, function() {
 		const match = $$match.apply(this, arguments);
 		return assignNames(match);
 	});
@@ -367,11 +365,11 @@ function setHiddenConst(object, key, value) {
 const $compile = RegExp.prototype.compile;
 RegExp.prototype.compile = function() {
 	if (instances.has(this)) {
-		throw new Error('RegExpX objects can not be recompiled');
+		throw new TypeError('RegExpX objects can not be recompiled');
 	}
 	return $compile.apply(this, arguments);
 };
 
 return (RegExpX.RegExpX = RegExpX);
 
-}; if (typeof define === 'function' && define.amd) { define([ 'exports', ], factory); } else { const exports = { }, result = factory(exports) || exports; if (typeof exports === 'object' && typeof module === 'object') { module.exports = result; } else { window[factory.name] = result; } } })();
+}; /* istanbul ignore next */ if (typeof define === 'function' && define.amd) { define([ 'exports', ], factory); } else { const exp = { }, result = factory(exp) || exp; if (typeof exports === 'object' && typeof module === 'object') { module.exports = result; } else { window[factory.name] = result; } } })();

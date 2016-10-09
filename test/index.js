@@ -5,6 +5,16 @@ const RegExpX = require('../');
 
 describe('"RegExpX" should', function() {
 
+	it('be callable as a template string tagging function of with options', () => {
+		(() => RegExpX`a`).should.not.throw();
+		(() => RegExpX('a')).should.not.throw();
+		(() => RegExpX({ })).should.not.throw();
+		(() => RegExpX()).should.throw(TypeError);
+		(() => RegExpX(42)).should.throw(TypeError);
+		(() => RegExpX(null)).should.throw(TypeError);
+		(() => RegExpX([ 'a', ])).should.throw(TypeError);
+	});
+
 	it('remove comments', () => {
 		RegExpX`#`.should.deep.equal(new RegExp(''));
 		RegExpX`a#b`.should.deep.equal((/a/));
@@ -59,6 +69,11 @@ describe('"RegExpX" should', function() {
 		exp2.test('aa').should.be.false; // /a{1,3}/
 
 		'u12Af'.should.match(RegExpX`${ /^\u12 Af$/ }`);
+		'u12Af'.should.match(RegExpX`${ /^\u12A f$/ }`);
+		'u12Af'.should.not.match(RegExpX`${ /^\u12Af$/ }`);
+		'cI'.should.match(RegExpX`${ /^\c I$/ }`);
+		'xab'.should.match(RegExpX`${ /^\x ab$/ }`);
+		'xab'.should.match(RegExpX`${ /^\xa b$/ }`);
 		(() => RegExpX('X')`${ /^\u12 Af$/ }`).should.throw(SyntaxError);
 		RegExpX`${ /^\u{123 Af}$/ }`.should.deep.equal((/^\u{123(?:)Af}$/));
 		(() => RegExpX('X')`${ /\u{123 Af}/ }`).should.throw(SyntaxError);
@@ -89,8 +104,10 @@ describe('"RegExpX" should', function() {
 		RegExpX('gimuy')`a`.should.deep.equal((/a/gimuy));
 		RegExpX('imuy')('g-m-y')`a`.should.deep.equal((/a/giu));
 		RegExpX('im')('-mg')`a`.should.deep.equal((/a/gi));
+		RegExpX('t')('-t')`a`.should.deep.equal((/a/));
 		(() => RegExpX('t')).should.not.throw();
 		(() => RegExpX('t')`a`).should.throw(SyntaxError);
+		(() => RegExpX('§')).should.throw(SyntaxError);
 	});
 
 	it('recognize added flags', () => {
@@ -105,7 +122,9 @@ describe('"RegExpX" should', function() {
 
 	it('disallow octal escapes (\\123)', () => {
 		RegExpX`\0`.should.deep.equal((/\0/));
+		RegExpX`[\0]`.should.deep.equal((/[\0]/));
 		RegExpX`\0 1`.should.deep.equal((/\0(?:)1/));
+		RegExpX`[\0 1]`.should.deep.equal((/[\0 1]/));
 		RegExpX`\0
 		9`.should.deep.equal((/\0(?:)9/));
 		(() => RegExpX`${ /\1/ }`).should.throw(SyntaxError);
@@ -244,6 +263,7 @@ describe('"RegExpX" should', function() {
 		RegExpX`(.)$1`.should.deep.equal((/(.)\1/));
 		RegExpX`(.)$<1>`.should.deep.equal((/(.)\1/));
 		RegExpX`(?<char>\w)$1`.should.deep.equal((/(\w)\1/));
+		RegExpX`\(?<char>\w\)()$1`.should.deep.equal((/\(?<char>\w\)()\1/));
 		const double = RegExpX`${{ char: /\w/, }}$<char>`;
 		double.test('aa').should.be.true;
 		double.test('ab').should.be.false;
@@ -257,6 +277,7 @@ describe('"RegExpX" should', function() {
 		sandwich.test('abb').should.be.false;
 		(() => RegExpX`$0`).should.throw(SyntaxError);
 		(() => RegExpX`$1`).should.throw(SyntaxError);
+		(() => RegExpX`(?<1st>\w)$<1st>`).should.throw(SyntaxError);
 		(() => RegExpX('n')`(.)$1`).should.throw(SyntaxError);
 		(() => RegExpX`(?<ch ar>\w)$<char>`).should.throw(SyntaxError);
 		(() => RegExpX`(? <char>\w)`).should.throw(SyntaxError);
@@ -273,6 +294,7 @@ describe('"RegExpX" should', function() {
 		RegExpX`(?>(a\())`.should.deep.equal((/(?=((a\()))\1/));
 		RegExpX`(?>(a\)))`.should.deep.equal((/(?=((a\))))\1/));
 		RegExpX`(?>a)(.)`.should.deep.equal((/(?=(a))\1(.)/));
+		RegExpX`\(?>a\)(.)`.should.deep.equal((/\(?>a\)(.)/));
 		Object.assign({ }, RegExpX`(?>a)(.)`.exec('ab')).should.deep.equal({ 0: 'ab', 1: 'b', index: 0, input: 'ab', });
 		RegExpX`(?>a*)${ { foo: 'bar', } }`.exec('aaabar').should.have.a.property('foo', 'bar');
 		RegExpX`(?>a*)${ { foo: 'bar', } }`.exec('aaabar').should.have.length(2);
@@ -286,7 +308,13 @@ describe('"RegExpX" should', function() {
 		RegExpX`a*+`.should.deep.equal((/(?=(a*))\1/));
 		RegExpX`a{3}+`.should.deep.equal((/(?=(a{3}))\1/));
 		RegExpX`a{1,5}+`.should.deep.equal((/(?=(a{1,5}))\1/));
+		RegExpX`[a]++`.should.deep.equal((/(?=([a]+))\1/));
+		RegExpX`[(a)]++`.should.deep.equal((/(?=([(a)]+))\1/));
+		RegExpX`[\[a]++`.should.deep.equal((/(?=([\[a]+))\1/));
 		RegExpX`(a)++`.should.deep.equal((/(?=((a)+))\1/));
+		RegExpX`((a))++`.should.deep.equal((/(?=(((a))+))\1/));
+		RegExpX`(((a)))++`.should.deep.equal((/(?=((((a)))+))\1/));
+		RegExpX`((((a))))++`.should.deep.equal((/(?=(((((a))))+))\1/));
 		RegExpX`(a[)])++`.should.deep.equal((/(?=((a[)])+))\1/));
 		RegExpX`(a[(])++`.should.deep.equal((/(?=((a[(])+))\1/));
 		RegExpX`(a\()++`.should.deep.equal((/(?=((a\()+))\1/));
@@ -305,6 +333,17 @@ describe('"RegExpX" should', function() {
 		const exp = RegExpX('imnuy')('g-m-y')`(.)-${{ char: /\w/ }}`;
 		exp.should.deep.equal((/(?:.)-(?:(\w))/giu));
 		RegExpX(exp.originalFlags)({ raw: [ exp.originalSource ], }).should.deep.equal(exp);
+	});
+
+	it('not be compilable', () => {
+		const native = /a/g;
+		native.compile('b', 'm');
+		native.should.deep.equal(/b/m);
+		const exp = RegExpX('g')`a`;
+		(() => exp.compile('b', 'm')).should.throw(TypeError);
+		exp.should.deep.equal(/a/g);
+		(() => native.compile.call(exp, 'b', 'm')).should.throw(TypeError);
+		exp.should.deep.equal(/a/g);
 	});
 
 	it('work', () => {
@@ -340,6 +379,8 @@ describe('"RegExpX" should', function() {
 				| \%
 			)*
 		)$`.should.deep.equal((/^(((https?|mailto)\:\/\/)?(?:[\#\@\&\=\+\$\,\/\?]|[\-\_\.\~\w]|\%)*)$/));
+
+		(() => RegExpX`[`).should.throw(SyntaxError);
 	});
 
 });

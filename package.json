@@ -4,15 +4,17 @@
 	"dependencies": {
 	},
 	"devDependencies": {
-		"chai": "^3.5.0",
-		"mocha": "^2.5.3"
+		"chai": "3.5.0",
+		"istanbul": "0.4.5",
+		"mocha": "2.5.3"
 	},
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/NiklasGollenstede/regexpx"
 	},
 	"scripts": {
-		"test": "mocha"
+		"test": "mocha",
+		"coverage": "istanbul cover ./node_modules/mocha/bin/_mocha -- -R spec"
 	},
-	"version": "0.1.0"
+	"version": "0.1.1"
 }
