@@ -15,20 +15,8 @@ const added_name2flag = {
 	'extra': 'X',
 };
 
-const name2flag = Object.assign(added_name2flag, native_name2flag);
-
-const flag2name = {
-	'n': 'noCapture',
-	's': 'singleLine',
-	'U': 'ungreedy',
-	'X': 'extra',
-
-	'g': 'global',
-	'i': 'ignoreCase',
-	'm': 'multiline',
-	'u': 'unicode',
-	'y': 'sticky',
-};
+const name2flag = Object.assign({ }, added_name2flag, native_name2flag);
+const flag2name = { }; Object.keys(name2flag).forEach(name => (flag2name[name2flag[name]] = name));
 
 const instances = new WeakSet;
 
@@ -64,8 +52,8 @@ const RegExpX = function RegExpX(/* options */) {
 		if (typeof arguments[0] === 'string') {
 			// replace options by those encoded in the string
 			const left = arguments[0].replace(/(-?)([A-Za-z])/g, (_, remove, flag) => ((flag2name[flag]
-				? options[flag2name[flag]] = !remove
-				: options.otherFlags = options.otherFlags.replace(new RegExp(flag +'|$'), remove ? '' : flag)
+				? (options[flag2name[flag]] = !remove)
+				: (options.otherFlags = options.otherFlags.replace(new RegExp(flag +'|$'), remove ? '' : flag))
 			), ''));
 			if (!(/^\s*$/).test(left)) { throw new SyntaxError('Unrecognised characters in RegExpX flags: "'+ left +'"'); }
 			return RegExpX.bind(options);
@@ -92,7 +80,7 @@ const RegExpX = function RegExpX(/* options */) {
 	const input = String.raw.apply(String, arguments); // get the string exactly as typed ==> no further escaping necessary
 
 	parse(ctx, input);
-	if (ctx.list) { RegExp('['); } // throws 'unterminated character class'
+	if (ctx.list) { RegExp('['); /* throws 'unterminated character class' */ } // eslint-disable-line no-invalid-regexp
 	const source = ctx.done;
 	const flags = Object.keys(native_name2flag).map(name => options[name] ? native_name2flag[name] : '').join('') + options.otherFlags;
 
@@ -119,7 +107,7 @@ function substitute(arg, pos) {
 }
 
 function escape(string) {
-	return string.replace(/[\-\[\]\{\}\(\)\*\+\?\.\,\\\/\^\$\|\#\s]/g, '\\$&');
+	return string.replace(/[\[\]\{\}\(\)\*\+\?\.\\\/\^\$\|\#\s]/g, '\\$&');
 }
 
 function isEscaped(ctx) {
@@ -128,24 +116,24 @@ function isEscaped(ctx) {
 // checks whether the string is escaping the char at index
 function isEscapeingAt(string, index) {
 	if (index === 0) { return false; }
-	let i = index - 1, found = 0;
+	let i = index - 1;
 	while (
 		i >= 0 && string[i] === '\\'
 	) { --i; }
 	return (index - i) % 2 === 0;
 }
 
-const parser = {
-	[/\s/](ctx, wsp) { // remove whitespaces or an escaping slash
+const parser = { /* eslint-disable no-dupe-keys */
+	[/\s+/](ctx, wsp) { // remove whitespaces or an escaping slash
 		if (ctx.list) { return true; }
 		if (isEscaped(ctx)) {
 			ctx.now = ctx.now.slice(0, -1) + wsp;
 		} else {
-			let s = ctx.now, i = s.length;
+			const s = ctx.now; let i = s.length;
 			while (
 				i >= 0 && (/[^\(\)\[\]\{\}\$\|\*\+\\\?]/).test(s[i])
 			) { --i; }
-			if (i < 0 || isEscapeingAt(s, i)) { return; }
+			if (i < 0 || isEscapeingAt(s, i)) { return false; }
 			switch (s[i]) { // insert (?:) if potentially within { }-quantifier or escape sequence
 				case '{': ctx.now += '(?:)'; break;
 				case '\\': switch (s[i + 1]) {
@@ -155,6 +143,7 @@ const parser = {
 				}
 			}
 		}
+		return false;
 	},
 	[/\[/](ctx) { // step into character list
 		!ctx.list && !isEscaped(ctx) && (ctx.list = true);
@@ -188,10 +177,11 @@ const parser = {
 		} else {
 			throw new SyntaxError('Reference to non-existent sub pattern "'+ (name || index) +'"');
 		}
+		return false;
 	},
 	[/\(\?>/](ctx) { // replace atomic groups with capturing lookaheads
 		if (ctx.list || isEscaped(ctx)) { return true; }
-		let s = ctx.next, i = 0, l = s.length, level = 1, skip = false;
+		const s = ctx.next, l = s.length; let i = 0, level = 1, skip = false;
 		while (i < l && level > 0) { switch (s[i]) {
 			case '[': !isEscapeingAt(s, i) && (skip = true); break;
 			case ']': !isEscapeingAt(s, i) && (skip = false); break;
@@ -203,6 +193,7 @@ const parser = {
 		const index = ctx.groups.push(false) - 1;
 		ctx.next = contents +'))\\'+ index + ctx.next;
 		ctx.now += '(?=(';
+		return false;
 	},
 	[/(?:\*|\+|\?|\{\d+(?:\,\d*)?\})/](ctx, found) { // implement 'U' flag and replace possessive quantifiers with capturing lookaheads
 		if (ctx.list || isEscaped(ctx)) { return true; }
@@ -219,7 +210,7 @@ const parser = {
 		}
 		// possessive quantifiers
 		ctx.now = ctx.done + ctx.now; ctx.done = '';
-		let s = ctx.now, i = s.length - 1, back = 0;
+		const s = ctx.now; let i = s.length - 1, back = 0;
 		switch (true) {
 			case s[i] === ']': {
 				do {
@@ -248,6 +239,7 @@ const parser = {
 		ctx.groups.splice(index, 0, false);
 		ctx.next = ctx.next.slice(1);
 		ctx.now += '(?=('+ contents +'))\\'+ index;
+		return false;
 	},
 	[/\(\?</](ctx) { // translate named groups and store references
 		if (ctx.list || isEscaped(ctx)) { return true; }
@@ -257,12 +249,14 @@ const parser = {
 		ctx.groups.push(match[1]);
 		ctx.next = ctx.next.slice(match[0].length);
 		ctx.now += '(';
+		return false;
 	},
 	[/\(/](ctx) { // find unnamed groups and ether write references or translate to non-capturing group ('n' flag)
 		if (ctx.list || isEscaped(ctx)) { return true; }
 		if ((/^\?/).test(ctx.next)) { return true; }
 		if (ctx.options.noCapture) {
 			ctx.now += '(?:';
+			return false;
 		} else {
 			ctx.groups.push(null);
 			return true;
@@ -275,12 +269,13 @@ const parser = {
 		} else {
 			ctx.next = ctx.next.replace(/^.*[^]/, '');
 		}
+		return false;
 	},
 	[/\\\d/](ctx, found) { // forbid octal escapes in the input
 		if (ctx.list) { return true; }
 		const digit = found[1];
 		if (digit === '0') {
-			if ((/^\s+\d/).test(ctx.next)) { ctx.now += found +'(?:)'; return; }
+			if ((/^\s+\d/).test(ctx.next)) { ctx.now += found +'(?:)'; return false; }
 			else if ((/^\D|^$/).test(ctx.next)) { return true; }
 			// throw new SyntaxError('Octal escapes are not allowed');
 		}
@@ -309,7 +304,7 @@ const parser = {
 		}
 		throw new SyntaxError('Unnecessary escape of character "'+ letter +'"');
 	},
-};
+}; /* eslint-enable no-dupe-keys */
 const tokens = new RegExp('(.*?)('+ Object.keys(parser).map(key => '('+ key.slice(1, -1) +')').join('|') +')', 'g');
 const replacers = Object.keys(parser).map(key => parser[key]);
 
@@ -349,11 +344,11 @@ function extendExec(regExp, groups) {
 		return match;
 	}
 	setHiddenConst(regExp, 'exec', function exec() {
-		const match = $exec.apply(this, arguments);
+		const match = $exec.apply(this, arguments); // eslint-disable-line no-invalid-this
 		return assignNames(match);
 	});
 	$$match && setHiddenConst(regExp, Symbol.match, function() {
-		const match = $$match.apply(this, arguments);
+		const match = $$match.apply(this, arguments); // eslint-disable-line no-invalid-this
 		return assignNames(match);
 	});
 }
@@ -372,4 +367,4 @@ RegExp.prototype.compile = function() {
 
 return (RegExpX.RegExpX = RegExpX);
 
-}; /* istanbul ignore next */ if (typeof define === 'function' && define.amd) { define([ 'exports', ], factory); } else { const exp = { }, result = factory(exp) || exp; if (typeof exports === 'object' && typeof module === 'object') { module.exports = result; } else { window[factory.name] = result; } } })();
+}; /* istanbul ignore next */ if (typeof define === 'function' && define.amd) { define([ 'exports', ], factory); } else { const exp = { }, result = factory(exp) || exp; if (typeof exports === 'object' && typeof module === 'object') { module.exports = result; } else { window[factory.name] = result; } } })(); // eslint-disable-line no-undef

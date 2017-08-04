@@ -3,9 +3,9 @@
 const RegExpX = require('../');
 
 
-describe('"RegExpX" should', function() {
+describe('"RegExpX" should', () => {
 
-	it('be callable as a template string tagging function of with options', () => {
+	it('be callable as a template string tagging function with options', () => {
 		(() => RegExpX`a`).should.not.throw();
 		(() => RegExpX('a')).should.not.throw();
 		(() => RegExpX({ })).should.not.throw();
@@ -15,14 +15,14 @@ describe('"RegExpX" should', function() {
 		(() => RegExpX([ 'a', ])).should.throw(TypeError);
 	});
 
-	it('remove comments', () => {
+	it('remove line comments', () => {
 		RegExpX`#`.should.deep.equal(new RegExp(''));
 		RegExpX`a#b`.should.deep.equal((/a/));
 		RegExpX`[a#b]{10}`.should.deep.equal((/[a#b]{10}/));
 		(() => RegExpX`(a#b){10}`).should.throw(SyntaxError);
 	});
 
-	it('keep escaped comments', () => {
+	it('keep escaped line comments', () => {
 		RegExpX`\#`.should.deep.equal((/#/));
 		RegExpX`a\#b`.should.deep.equal((/a#b/));
 		RegExpX`[a\#b]{10}`.should.deep.equal((/[a\#b]{10}/));
@@ -48,6 +48,9 @@ describe('"RegExpX" should', function() {
 		RegExpX`a
 		`.should.deep.equal((/a/));
 		RegExpX`a {1,3}`.should.deep.equal((/a{1,3}/));
+		RegExpX`a
+			# comment
+		*`.should.deep.equal((/a*/));
 	});
 
 	it('keep escaped whitespaces', () => {
@@ -146,11 +149,14 @@ describe('"RegExpX" should', function() {
 	it(`escape string substitutions`, () => {
 		const question = '?';
 		RegExpX`${ 'Name' } ${ question }`.should.deep.equal((/Name\?/));
+		RegExpX`${ '#' }`.should.deep.equal((/#/));
+		(() => RegExpX('u')`${ '-' }`).should.not.throw(); // must not result in /\-/u ("meaningless" escape)
+		// RegExpX`[${ 'a-b' }]`.should.deep.equal((/[a\-b]/)); // TODO: unfortunately the escaping is not context-aware and can't do this *and* the above
 	});
 
 	it(`substitute arrays as a list of alternatives`, () => {
 		const punctuation = [ '?', '!', '.', ',', ';', ];
-		RegExpX`${ 'Name' } ${ punctuation }`.should.deep.equal((/Name(?:\?|!|\.|\,|;)/));
+		RegExpX`${ 'Name' } ${ punctuation }`.should.deep.equal((/Name(?:\?|!|\.|,|;)/));
 	});
 
 	it(`substitute object as a list of capturing alternatives`, () => {
@@ -220,12 +226,12 @@ describe('"RegExpX" should', function() {
 		RegExpX('n')`(?:.)`.should.deep.equal((/(?:.)/));
 		RegExpX('n')`(?!.)`.should.deep.equal((/(?!.)/));
 		RegExpX('n')`[(.)]`.should.deep.equal((/[(.)]/));
-		RegExpX('n')`(.)-${{ char: /\w/ }}`.should.deep.equal((/(?:.)-(?:(\w))/));
-		RegExpX('n')`(.)-${{ char: /\w/ }}`.exec('a-b').should.have.a.property('char', 'b');
+		RegExpX('n')`(.)-${{ char: /\w/, }}`.should.deep.equal((/(?:.)-(?:(\w))/));
+		RegExpX('n')`(.)-${{ char: /\w/, }}`.exec('a-b').should.have.a.property('char', 'b');
 	});
 
 	it(`accept the 'X' (extra) flag (forbid unnecessary escapes)`, () => {
-		[ RegExpX, RegExpX('X') ].forEach(RegExpX => {
+		[ RegExpX, RegExpX('X'), ].forEach(RegExpX => {
 			RegExpX`\d\D\w\W\s\S\t\r\n\v\f`.should.deep.equal((/\d\D\w\W\s\S\t\r\n\v\f/));
 			RegExpX`\cM`.should.deep.equal((/\cM/));
 			RegExpX`\x0F`.should.deep.equal((/\x0F/));
@@ -271,7 +277,7 @@ describe('"RegExpX" should', function() {
 		RegExpX`(?<char>\w)$<char>`.should.deep.equal((/(\w)\1/));
 		RegExpX`(?<char>\w)$ <char>`.should.deep.equal((/(\w)$<char>/));
 		RegExpX`(.)[$1]`.should.deep.equal((/(.)[$1]/));
-		const sandwich = RegExpX`${{ char: /\w/ }}(?<char>\w)$<char>`;
+		const sandwich = RegExpX`${{ char: /\w/, }}(?<char>\w)$<char>`;
 		sandwich.test('aaa').should.be.true;
 		sandwich.test('aba').should.be.true;
 		sandwich.test('abb').should.be.false;
@@ -282,8 +288,8 @@ describe('"RegExpX" should', function() {
 		(() => RegExpX`(?<ch ar>\w)$<char>`).should.throw(SyntaxError);
 		(() => RegExpX`(? <char>\w)`).should.throw(SyntaxError);
 		(() => RegExpX`(?<char>\w)$<ch ar>`).should.throw(SyntaxError);
-		(() => RegExpX`${{ $: /\w/ }}`).should.throw(SyntaxError);
-		(() => RegExpX`${{ '': /\w/ }}`).should.throw(SyntaxError);
+		(() => RegExpX`${{ $: /\w/, }}`).should.throw(SyntaxError);
+		(() => RegExpX`${{ '': /\w/, }}`).should.throw(SyntaxError);
 	});
 
 	it(`translate atomic groups`, () => {
@@ -330,9 +336,9 @@ describe('"RegExpX" should', function() {
 	});
 
 	it('have .originalSource and .originalFlags', () => {
-		const exp = RegExpX('imnuy')('g-m-y')`(.)-${{ char: /\w/ }}`;
+		const exp = RegExpX('imnuy')('g-m-y')`(.)-${{ char: /\w/, }}`;
 		exp.should.deep.equal((/(?:.)-(?:(\w))/giu));
-		RegExpX(exp.originalFlags)({ raw: [ exp.originalSource ], }).should.deep.equal(exp);
+		RegExpX(exp.originalFlags)({ raw: [ exp.originalSource, ], }).should.deep.equal(exp);
 	});
 
 	it('not be compilable', () => {
@@ -353,12 +359,12 @@ describe('"RegExpX" should', function() {
 			\# # '#'-char
 			\# not a comment # but this is
 			${ ',?' } # a string substitution
-			${{ chars: /\w+/ }} # a implicitly named group
+			${{ chars: /\w+/, }} # a implicitly named group
 			(?<chars>\w) # explicitly named group withthe same name
 			$<chars> # a reference to that group
 			$1 # a reference to the first line
 			. # match all chars except newline
-		`.should.deep.equal((/([\n\ ])\/##notacomment\,\?(?:(\w+))(\w)\2\1./g));
+		`.should.deep.equal((/([\n\ ])\/##notacomment,\?(?:(\w+))(\w)\2\1./g));
 
 		RegExpX`^(
 			 \d\d\d\d (- W[0-5]?\d)?                          # years + optional weeks

@@ -1,20 +1,29 @@
 {
 	"name": "regexpx",
+	"version": "0.1.2",
 	"description": "Adds the flags 'x', 'U', 's' and 'n' to JavaScripts native Regular Expressions",
-	"dependencies": {
-	},
-	"devDependencies": {
-		"chai": "3.5.0",
-		"istanbul": "0.4.5",
-		"mocha": "2.5.3"
-	},
+	"author": "Niklas Gollenstede",
+	"license": "MPL-2.0",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/NiklasGollenstede/regexpx"
 	},
+	"dependencies": {},
+	"devDependencies": {
+		"chai": "3.5.0",
+		"istanbul": "0.4.5",
+		"mocha": "2.5.3",
+		"babel-eslint": "7.1.1",
+		"eslint": "3.14.1",
+		"eslintrc": "NiklasGollenstede/eslintrc"
+	},
+	"main": "build.js",
 	"scripts": {
 		"test": "mocha",
-		"coverage": "istanbul cover ./node_modules/mocha/bin/_mocha -- -R spec"
+		"coverage": "istanbul cover ./node_modules/mocha/bin/_mocha -- -R spec",
+		"lint": "eslint --ignore-path .gitignore ."
 	},
-	"version": "0.1.1"
+	"eslintConfig": {
+		"extends": "./node_modules/eslintrc/web-ext.js"
+	}
 }

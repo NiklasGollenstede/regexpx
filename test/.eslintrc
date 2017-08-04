@@ -1,0 +1,11 @@
+{
+	"extends": "../node_modules/eslintrc/node.js",
+	"rules": {
+		"no-console": "off",
+		"no-unused-expressions": "off"
+	},
+	"globals": {
+		"describe": true,
+		"it": true
+	}
+}
