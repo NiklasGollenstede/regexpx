@@ -95,8 +95,11 @@ const RegExpX = function RegExpX(/* options */) {
 function substitute(arg, pos) {
 	if (typeof arg === 'string') { return escape(arg); }
 	if (typeof arg !== 'object') { throw new TypeError(`Bad type for substitution value: ${ typeof arg } at value ${ pos }`); }
-	if (typeof arg.originalSource === 'string') { return arg.originalSource; }
-	if (typeof arg.source === 'string') { return arg.source; }
+	if (typeof arg.originalSource === 'string') { return arg.originalSource +'\n'; }
+	if (typeof arg.source === 'string') {
+		const source = arg.source;
+		return source.replace(/#/g, (_, i) => isEscapeingAt(source, i) ? '#' : '\\#');
+	}
 	if (Array.isArray(arg)) {
 		return '(?:'+ arg.map(item => substitute(item, pos)).join('|') +')';
 	}
@@ -127,7 +130,7 @@ const parser = { /* eslint-disable no-dupe-keys */
 	[/\s+/](ctx, wsp) { // remove whitespaces or an escaping slash
 		if (ctx.list) { return true; }
 		if (isEscaped(ctx)) {
-			ctx.now = ctx.now.slice(0, -1) + wsp;
+			ctx.now = ctx.now.slice(0, -1) + wsp[0];
 		} else {
 			const s = ctx.now; let i = s.length;
 			while (

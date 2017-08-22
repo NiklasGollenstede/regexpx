@@ -1,6 +1,6 @@
 {
 	"name": "regexpx",
-	"version": "0.1.2",
+	"version": "0.1.3",
 	"description": "Adds the flags 'x', 'U', 's' and 'n' to JavaScripts native Regular Expressions",
 	"author": "Niklas Gollenstede",
 	"license": "MPL-2.0",

@@ -55,6 +55,7 @@ describe('"RegExpX" should', () => {
 
 	it('keep escaped whitespaces', () => {
 		RegExpX`\ `.should.deep.equal((/ /));
+		RegExpX`\   `.should.deep.equal((/ /));
 		RegExpX`\
 `.should.deep.equal(new RegExp(String.raw`
 `));
@@ -136,7 +137,7 @@ describe('"RegExpX" should', () => {
 		(() => RegExpX`${ /\901/ }`).should.throw(SyntaxError);
 	});
 
-	it(`paste an objects/RegExp's .originalSource/.souce property value`, () => {
+	it(`paste an objects/RegExp's .originalSource/.source property value`, () => {
 		const newLine = /(?:\r\n?|\n)/;
 		const sentence = /([\w\.\ 0-9]*)/gim;
 		RegExpX`(${ sentence } (<br><\/br>)+ ${ newLine })+`.should.deep.equal((/(([\w\.\ 0-9]*)(<br><\/br>)+(?:\r\n?|\n))+/));
@@ -144,6 +145,16 @@ describe('"RegExpX" should', () => {
 		RegExpX`a${ noCapture }b`.should.deep.equal((/a(.)b/));
 		const named = RegExpX`${ { foo: 'bar', } }`;
 		RegExpX`a${ named }b`.exec('abarb').should.have.a.property('foo', 'bar');
+	});
+
+	it(`but escape #es in .source and add a line beak after .originalSource`, () => {
+		(() => RegExpX`(${ /#/ })`).should.not.throw();
+		(() => RegExpX`(${ /##/ })`).should.not.throw();
+		(() => RegExpX`(${ /\#/ })`).should.not.throw();
+		'#'.match(RegExpX`^(${ /#/ })$`);
+		'#'.match(RegExpX`^(${ /\#/ })$`);
+		const comment = RegExpX`a # comment`;
+		(() => RegExpX`(${ comment })`).should.not.throw();
 	});
 
 	it(`escape string substitutions`, () => {
