@@ -25,7 +25,7 @@ describe('"RegExpX" should', () => {
 	it('keep escaped line comments', () => {
 		RegExpX`\#`.should.deep.equal((/#/));
 		RegExpX`a\#b`.should.deep.equal((/a#b/));
-		RegExpX`[a\#b]{10}`.should.deep.equal((/[a\#b]{10}/));
+		RegExpX`[a\#b]{10}`.should.deep.equal((/[a#b]{10}/));
 		RegExpX`(a\#b){10}`.should.deep.equal((/(a#b){10}/));
 	});
 
@@ -162,6 +162,7 @@ describe('"RegExpX" should', () => {
 		RegExpX`${ 'Name' } ${ question }`.should.deep.equal((/Name\?/));
 		RegExpX`${ '#' }`.should.deep.equal((/#/));
 		(() => RegExpX('u')`${ '-' }`).should.not.throw(); // must not result in /\-/u ("meaningless" escape)
+		(() => RegExpX('u')`[${ '#' }]`).should.not.throw(); // must not result in /[\#]/u ("meaningless" escape)
 		// RegExpX`[${ 'a-b' }]`.should.deep.equal((/[a\-b]/)); // TODO: unfortunately the escaping is not context-aware and can't do this *and* the above
 	});
 
@@ -395,7 +396,7 @@ describe('"RegExpX" should', () => {
 				| [\-\_\.\~\w]           # unreserved
 				| \%
 			)*
-		)$`.should.deep.equal((/^(((https?|mailto)\:\/\/)?(?:[\#\@\&\=\+\$\,\/\?]|[\-\_\.\~\w]|\%)*)$/));
+		)$`.should.deep.equal((/^(((https?|mailto)\:\/\/)?(?:[#\@\&\=\+\$\,\/\?]|[\-\_\.\~\w]|\%)*)$/));
 
 		(() => RegExpX`[`).should.throw(SyntaxError);
 	});

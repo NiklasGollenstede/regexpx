@@ -266,10 +266,10 @@ const parser = { /* eslint-disable no-dupe-keys */
 		}
 	},
 	[/\#/](ctx) { // strip comments
-		if (ctx.list) { return true; }
 		if (isEscaped(ctx)) {
 			ctx.now = ctx.now.slice(0, -1) +'#';
 		} else {
+			if (ctx.list) { return true; }
 			ctx.next = ctx.next.replace(/^.*[^]/, '');
 		}
 		return false;
