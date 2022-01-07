@@ -1,6 +1,6 @@
 {
 	"name": "regexpx",
-	"version": "0.1.4",
+	"version": "0.1.5",
 	"description": "Adds the flags 'x', 'U', 's' and 'n' to JavaScripts native Regular Expressions",
 	"author": "Niklas Gollenstede",
 	"license": "MPL-2.0",
@@ -17,7 +17,6 @@
 		"eslint": "3.14.1",
 		"eslintrc": "NiklasGollenstede/eslintrc"
 	},
-	"main": "build.js",
 	"scripts": {
 		"test": "mocha",
 		"coverage": "istanbul cover ./node_modules/mocha/bin/_mocha -- -R spec",

@@ -277,14 +277,13 @@ const parser = { /* eslint-disable no-dupe-keys */
 	[/\\\d/](ctx, found) { // forbid octal escapes in the input
 		if (ctx.list) { return true; }
 		const digit = found[1];
-		if (digit === '0') {
-			if ((/^\s+\d/).test(ctx.next)) { ctx.now += found +'(?:)'; return false; }
+		if (digit === '0') { // '\0' for null char is ok
+			if ((/^\s+\d/).test(ctx.next)) { ctx.now += found +'(?:)'; return false; } // make sure that stripping the whitespaces won't cause problems
 			else if ((/^\D|^$/).test(ctx.next)) { return true; }
-			// throw new SyntaxError('Octal escapes are not allowed');
 		}
 		const index = +(digit + (/^\d*/).exec(ctx.next)[0]);
 		if (ctx.groups[index] === false) { return true; }
-		throw new SyntaxError('Octal escapes are not allowed');
+		throw new SyntaxError('Octal escapes are not allowed (use $ to reference groups)))))))');
 	},
 	[/\\[A-Za-z]/](ctx, found) { // forbid unnecessary escapes
 		if (!ctx.options.extra) { ctx.next = found + ctx.next; return 2; }

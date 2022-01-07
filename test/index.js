@@ -135,6 +135,8 @@ describe('"RegExpX" should', () => {
 		(() => RegExpX`${ /\01/ }`).should.throw(SyntaxError);
 		(() => RegExpX`${ /\001/ }`).should.throw(SyntaxError);
 		(() => RegExpX`${ /\901/ }`).should.throw(SyntaxError);
+		(() => RegExpX`${ /(.)\1/ }`).should.throw(SyntaxError);
+		RegExpX`${ /(.)$1/ }`.should.deep.equal((/(.)\1/));
 	});
 
 	it(`paste an objects/RegExp's .originalSource/.source property value`, () => {
